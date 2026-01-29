@@ -5,11 +5,75 @@ import * as fs from 'fs/promises';
 
 export const dynamic = 'force-dynamic';
 
+const isWindows = process.platform === 'win32';
+const ENV_FILE_PATH = isWindows
+  ? 'c:\\dev\\comfy-bridge\\.env'
+  : '/app/comfy-bridge/.env';
+
+// Get allowed workflows from .env WORKFLOW_FILE
+async function getAllowedWorkflows(): Promise<string[]> {
+  console.log(`[blockchain-models] Reading .env from: ${ENV_FILE_PATH}`);
+  try {
+    const envContent = await fs.readFile(ENV_FILE_PATH, 'utf-8');
+    const lines = envContent.split('\n');
+
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('WORKFLOW_FILE=')) {
+        const raw = trimmed.slice('WORKFLOW_FILE='.length).replace(/^["']|["']$/g, '');
+        console.log(`[blockchain-models] WORKFLOW_FILE raw value: "${raw}"`);
+        if (!raw) return [];
+
+        const workflows = raw.includes(',')
+          ? raw.split(',').map(s => s.trim()).filter(Boolean)
+          : raw.split(/\s+/).filter(Boolean);
+
+        // Return normalized versions for matching
+        const normalized = workflows.map(w => w.replace(/\.json$/, '').toLowerCase());
+        console.log(`[blockchain-models] Allowed workflows: ${JSON.stringify(normalized)}`);
+        return normalized;
+      }
+    }
+    console.log('[blockchain-models] WORKFLOW_FILE not found in .env');
+    return [];
+  } catch (error) {
+    console.error('[blockchain-models] Error reading .env for workflows:', error);
+    return [];
+  }
+}
+
+// Check if a model name matches any allowed workflow
+function isModelAllowed(displayName: string, fileName: string, allowedWorkflows: string[]): boolean {
+  if (allowedWorkflows.length === 0) {
+    console.log('[blockchain-models] No allowed workflows, allowing all models');
+    return true; // No filter if no workflows specified
+  }
+
+  // Normalize for matching (remove underscores/hyphens/dots/spaces, lowercase)
+  const normalize = (s: string) => s.toLowerCase().replace(/[_\-.\s]+/g, '');
+  const normalizedName = normalize(displayName);
+  const normalizedFileName = normalize(fileName);
+
+  for (const workflow of allowedWorkflows) {
+    const normalizedWorkflow = normalize(workflow);
+
+    // Exact normalized match (handles z-image-turbo = zimageturbo, etc.)
+    if (normalizedName === normalizedWorkflow || normalizedFileName === normalizedWorkflow) {
+      return true;
+    }
+
+    // Direct case-insensitive match
+    if (displayName.toLowerCase() === workflow.toLowerCase()) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 // Grid ModelVault contract on Base Mainnet - matches Python modelvault_client.py
 const MODELVAULT_CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_MODELVAULT_CONTRACT || '0x79F39f2a0eA476f53994812e6a8f3C8CFe08c609';
 const MODELVAULT_RPC_URL = process.env.NEXT_PUBLIC_MODELVAULT_RPC_URL || 'https://mainnet.base.org';
-
-const isWindows = process.platform === 'win32';
 
 // ABI matching Grid proxy ModelVault module
 // Grid ModelVault struct: modelHash, modelType, fileName, name, version, ipfsCid, downloadUrl,
@@ -140,10 +204,18 @@ function generateDescription(displayName: string): string {
     return 'Chroma model for image generation';
   }
   
-  if (nameLower.includes('ltxv')) {
+  if (nameLower.includes('ltx') && (nameLower.includes('2') || nameLower.includes('i2v'))) {
+    return 'LTX-2 Image-to-Video generation model - 19B parameters';
+  }
+
+  if (nameLower.includes('ltxv') || nameLower.includes('ltx')) {
     return 'LTX Video generation model';
   }
-  
+
+  if (nameLower.includes('z') && nameLower.includes('image') && nameLower.includes('turbo')) {
+    return 'Z-Image-Turbo - Fast high-quality image generation';
+  }
+
   return `${displayName} model`;
 }
 
@@ -162,6 +234,17 @@ export async function GET() {
 
     // Load descriptions from catalog for enrichment
     const catalogData = await loadDescriptionsFromCatalog();
+
+    // Get allowed workflows for filtering
+    let allowedWorkflows = await getAllowedWorkflows();
+
+    // Fallback to hardcoded list if .env reading fails
+    if (allowedWorkflows.length === 0) {
+      console.log('[blockchain-models] No workflows from .env, using default filter list');
+      allowedWorkflows = ['z-image-turbo', 'flux.1-krea-dev', 'ltx2_i2v'];
+    }
+    console.log(`[blockchain-models] Filtering to workflows: ${allowedWorkflows.join(', ')}`);
+
 
     // Get total model count
     let totalModels: bigint;
@@ -266,8 +349,14 @@ export async function GET() {
           vramMB: Number(result.vramMB || 0),
         };
 
+        // Filter to only allowed workflows
+        if (!isModelAllowed(displayName, fileName, allowedWorkflows)) {
+          console.log(`[blockchain-models] Model ${modelId}: ${displayName} - filtered out (not in allowed workflows)`);
+          continue;
+        }
+
         models.push(model);
-        console.log(`[blockchain-models] Model ${modelId}: ${displayName} (${fileName})`);
+        console.log(`[blockchain-models] Model ${modelId}: ${displayName} (${fileName}) - included`);
       } catch (error: any) {
         // Check for rate limiting
         if (error.message?.includes('rate') || error.message?.includes('429')) {
