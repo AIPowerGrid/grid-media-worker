@@ -39,8 +39,8 @@ concrete detail in children. Delete stale notes instead of explaining history.
 Runs a local ComfyUI install as a grid GPU worker. Receives image/video jobs from the
 grid, renders them by templating a ComfyUI workflow graph and posting it to ComfyUI's
 `/prompt` API, streams progress/preview frames upstream, and returns the outputs.
-Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Entry point:
-`bridge.cli:main` (console script `grid-media-worker`).
+Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console script:
+`comfy-bridge` (entry point `bridge.cli:main`).
 
 ## Ownership
 
@@ -57,10 +57,16 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Entry point:
 
 - **Inherit org engineering standards:** aipg-documentation/engineering-standards/
   (core + git + the matching language file — Python).
-- **Two transports, one selected by `GRID_WS`:** the v2 WebSocket worker (`bridge/ws_worker.py`,
-  push dispatch + presigned R2 PUT, the forward direction) and the legacy v2 poll loop
-  (`bridge/bridge.py`, `/v2/generate/pop` → `/submit`). `GRID_WS=false` by default. New work
-  targets the WS path.
+- **WebSocket is the working transport.** `bridge/ws_worker.py` opens a persistent WebSocket to
+  `/v1/workers/ws` (derived from `GRID_API_URL`) for push dispatch + presigned R2 PUT. The
+  legacy poll loop (`bridge/bridge.py`, `/v2/generate/pop` → `/submit`) targets the RETIRED `/v2`
+  queue and no longer functions server-side — do not treat it as a working default even though
+  `GRID_WS` still defaults `false` in config. All new work targets the WS path (`GRID_WS=true`).
+- **Recipe-executor dispatch (primary):** the grid resolves a job's `recipe_spec` server-side
+  and pushes the graph; `bridge/workflow.py:build_recipe_workflow` runs that core-resolved spec
+  directly (binding only supplied source images into declared slots). This is the forward
+  dispatch mode — "add a recipe in core → it runs here" — preferred over local model→workflow
+  mapping.
 - **Advertise only what you can serve:** a model is advertised only when its workflow file is
   resolvable. With `WORKFLOW_FILE` set, models are derived from the checkpoint files in those
   graphs via the local model reference; unresolved files are not advertised.

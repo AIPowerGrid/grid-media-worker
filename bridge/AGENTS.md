@@ -7,17 +7,22 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 
 ## Ownership
 
-- **Transport (forward, default-off):** `ws_worker.py` — v2 WebSocket worker. Registers
-  (`apikey`/`name`/`models`/`job_types`), receives `job` messages, renders, uploads each output
-  to its presigned R2 slot, replies `done` with seeds + sha256 receipts. `GRID_WS=true`.
-- **Transport (legacy):** `bridge.py` (`ComfyUIBridge`) — poll loop `/v2/generate/pop` →
-  render → R2-or-base64 → `/v2/generate/submit`. `api_client.py` is the HTTP client for this
-  path (pop/submit + `update_progress`/`send_preview`). `_view_url` (in `bridge.py`) builds
-  ComfyUI `/view` URLs (keep `subfolder`+`type` — WAN videos land in subfolders).
+- **Transport (forward, the working path):** `ws_worker.py` — persistent WebSocket to
+  `/v1/workers/ws` (derived from `GRID_API_URL`). Registers (`apikey`/`name`/`models`/`job_types`),
+  receives `job` messages, renders, uploads each output to its presigned R2 slot, replies `done`
+  with seeds + sha256 receipts. Enable with `GRID_WS=true`.
+- **Transport (legacy, RETIRED server-side):** `bridge.py` (`ComfyUIBridge`) — poll loop
+  `/v2/generate/pop` → render → R2-or-base64 → `/v2/generate/submit`. The grid's `/v2` queue is
+  gone, so this path no longer functions; `api_client.py` is its HTTP client. `_view_url` (in
+  `bridge.py`) builds ComfyUI `/view` URLs (keep `subfolder`+`type` — WAN videos land in
+  subfolders) and is still reused by the WS path.
 - **Mapping:** `model_mapper.py` — grid model name → workflow filename (`DEFAULT_WORKFLOW_MAP`
   + img2img map), and checkpoint-file → grid-name resolution via the local model reference.
-- **Templating:** `workflow.py` — `build_workflow(job)` loads the mapped graph and fills
-  prompt/seed/dimensions/batch/output-prefix. Handles both graph shapes and the `_bridge` block.
+- **Templating:** `workflow.py` — two paths. `build_recipe_workflow(job, payload)` executes a
+  core-resolved `recipe_spec` the grid pushes (binds supplied source images into declared slots
+  only; never invents structure) — the primary dispatch mode. `build_workflow(job)` is the local
+  fallback: loads the mapped graph and fills prompt/seed/dimensions/batch/output-prefix, handling
+  both graph shapes and the `_bridge` block.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
 - **Detection/UI:** `comfyui_detect.py` (find/install ComfyUI for the wizard); `web/` — control
   UI, owned in its own AGENTS.md.
