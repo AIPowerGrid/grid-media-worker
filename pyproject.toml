@@ -34,4 +34,4 @@ where = ["."]
 include = ["bridge*"]
 
 [tool.setuptools.package-data]
-bridge = ["web/templates/**/*.html", "web/static/**/*"]
+bridge = ["web/templates/**/*.html", "web/static/**/*", "certs/*.pem"]

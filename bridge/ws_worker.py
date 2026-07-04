@@ -18,6 +18,8 @@ import asyncio
 import base64
 import hashlib
 import json
+import os
+import ssl
 import logging
 import random
 import time
@@ -44,12 +46,45 @@ MAX_SEED = 2**53 - 1
 
 
 def grid_ws_url() -> str:
-    """Derive the worker WS URL from GRID_API_URL (handles legacy /api tails)."""
-    url = Settings.GRID_API_URL.rstrip("/")
+    """Derive the worker WS URL from GRID_API_URL (handles legacy /api tails).
+
+    Auto-maps an `api.*` host to `ws.*`: the public grid serves the persistent
+    worker WebSocket on a DNS-only `ws.` host (bypasses Cloudflare, which resets
+    long-lived WS). Zero operator config; GRID_STREAMING_URL overrides.
+    """
+    base = getattr(Settings, "GRID_STREAMING_URL", "") or Settings.GRID_API_URL
+    if not getattr(Settings, "GRID_STREAMING_URL", ""):
+        for scheme in ("https://", "http://"):
+            if base.startswith(scheme + "api."):
+                base = scheme + "ws." + base[len(scheme) + 4:]
+                break
+    url = base.rstrip("/")
     if url.endswith("/api"):
         url = url[:-4]
     url = url.replace("https://", "wss://").replace("http://", "ws://")
     return f"{url}/v1/workers/ws"
+
+
+def grid_ws_ssl(url: str):
+    """SSL context for the worker WS: trust system CAs + the bundled Cloudflare
+    Origin CA so the DNS-only ws.* endpoint verifies without Let's Encrypt.
+    None for plain ws://. GRID_WS_CA overrides; GRID_WS_INSECURE disables verify."""
+    if not url.startswith("wss://"):
+        return None
+    ctx = ssl.create_default_context()
+    ca = getattr(Settings, "GRID_WS_CA", "") or os.path.join(
+        os.path.dirname(__file__), "certs", "cloudflare_origin_root.pem"
+    )
+    try:
+        if ca and os.path.exists(ca):
+            ctx.load_verify_locations(ca)
+    except Exception as e:
+        logger.warning(f"could not load WS CA '{ca}': {e}")
+    if getattr(Settings, "GRID_WS_INSECURE", False):
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        logger.warning("GRID_WS_INSECURE=1 — WS certificate verification DISABLED")
+    return ctx
 
 
 def _coerce_seed(value):
@@ -118,7 +153,7 @@ class WSWorker:
     async def _session(self):
         url = grid_ws_url()
         logger.info(f"Connecting to {url} ...")
-        async with websockets.connect(url, ping_interval=30, ping_timeout=10) as ws:
+        async with websockets.connect(url, ssl=grid_ws_ssl(url), ping_interval=30, ping_timeout=10) as ws:
             await ws.send(json.dumps({
                 "apikey": Settings.GRID_API_KEY,
                 "name": Settings.GRID_WORKER_NAME,

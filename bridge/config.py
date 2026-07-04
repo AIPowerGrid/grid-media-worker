@@ -14,6 +14,13 @@ class Settings:
     # WS worker derives /v1/workers/ws from this. A legacy /api tail is
     # tolerated and stripped where needed.
     GRID_API_URL = os.getenv("GRID_API_URL", "https://api.aipowergrid.io")
+    # WS endpoint: auto-derived api.*->ws.* (DNS-only host that bypasses
+    # Cloudflare's WS resets). Override with GRID_STREAMING_URL. That endpoint
+    # serves the Cloudflare Origin cert, verified via the bundled CF Origin CA
+    # (certs/cloudflare_origin_root.pem) — no Let's Encrypt. Optional overrides:
+    GRID_STREAMING_URL = os.getenv("GRID_STREAMING_URL", "")
+    GRID_WS_CA = os.getenv("GRID_WS_CA", "")
+    GRID_WS_INSECURE = os.getenv("GRID_WS_INSECURE", "false").lower() in ("1", "true", "yes")
     # v2 WebSocket worker protocol (push dispatch + presigned R2 uploads).
     # Off by default until the v2 API is the production default deployment.
     GRID_WS = os.getenv("GRID_WS", "false").lower() == "true"
