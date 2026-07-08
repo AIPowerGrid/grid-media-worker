@@ -1,5 +1,11 @@
 # ComfyUI Bridge Workflow Templates
 
+> **Adding a NEW model? Don't start here.** These `_bridge` workflow templates are
+> the legacy worker-side path. New image/video models are added as **governed recipes**
+> in grid-core — see `grid-core/docs/architecture/RECIPE_DISPATCH.md`. The recipe flow
+> auto-detects the node map for you and adds clamp/enum governance the `_bridge` format
+> never had. This file is kept only for the models still on the legacy path.
+
 This directory contains workflow templates for the ComfyUI Bridge. Each workflow file is a JSON representation of a ComfyUI workflow.
 
 ## How to Use
