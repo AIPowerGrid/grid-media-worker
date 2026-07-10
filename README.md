@@ -19,7 +19,7 @@ This allows you to contribute GPU cycles to a decentralized AI rendering network
 - Auto-detects installed ComfyUI model checkpoints and maps them to AI Power Grid model names.  
 - Customizable: override advertised models via `GRID_MODEL` (supports comma-separated lists).  
 - Workflow templating: use your own ComfyUI `.json` workflow files.  
-- Async, multi-threaded job polling and processing.  
+- Persistent WebSocket dispatch with streamed progress and presigned uploads.
 
 ---
 
@@ -27,7 +27,7 @@ This allows you to contribute GPU cycles to a decentralized AI rendering network
 
 1. **Python 3.9+**  
 2. **ComfyUI** running locally (default: `http://127.0.0.1:8188`).  
-3. **AI Power Grid** account + API key: https://aipowergrid.io/register  
+3. **AI Power Grid** account + API key from the [developer console](https://console.aipowergrid.io/dashboard/api-key).
 
 ---
 
@@ -35,8 +35,8 @@ This allows you to contribute GPU cycles to a decentralized AI rendering network
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/AIPowerGrid/comfy-bridge.git
-cd comfy-bridge
+git clone https://github.com/AIPowerGrid/grid-media-worker.git
+cd grid-media-worker
 
 # 2. Create & activate a virtual environment
 python -m venv venv
@@ -62,9 +62,10 @@ cp .env.example .env
 ```ini
 # .env
 GRID_API_KEY=your_powergrid_api_key          # required
-GRID_WORKER_NAME=MyComfyWorker.APIG_Wallet   # optional
+GRID_WORKER_NAME=MyComfyWorker               # optional
 COMFYUI_URL=http://127.0.0.1:8188            # optional
-GRID_API_URL=https://api.aipowergrid.io/api  # optional
+GRID_API_URL=https://api.aipowergrid.io      # optional
+GRID_WS=true                                 # required current transport
 GRID_NSFW=false                              # allow NSFW? true/false
 GRID_THREADS=2                               # concurrent jobs
 GRID_MAX_PIXELS=1048576                      # max output resolution (pixels)
@@ -82,20 +83,13 @@ WORKFLOW_FILE=my_workflow.json               # ComfyUI JSON export template
 Start your ComfyUI web server, then:
 
 ```bash
-# Via CLI module
-python -m bridge.cli
-```
-
-Or directly (legacy):
-
-```bash
-start_bridge.py
+comfy-bridge
 ```
 
 The bridge will:
 
 1. Register as a worker with AI Power Grid.
-2. Poll for jobs every few seconds.
+2. Receive jobs over the Grid worker WebSocket.
 3. Render in ComfyUI.
 4. Submit results back to the network.
 

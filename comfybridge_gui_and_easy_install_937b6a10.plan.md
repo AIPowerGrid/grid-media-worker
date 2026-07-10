@@ -49,7 +49,7 @@ isProject: false
 ## 2. Configurable with a GUI
 
 - **Web UI** served by the bridge (e.g. same process as the worker, or a small FastAPI/Flask app bound to a port).
-- **Settings page** to view/edit bridge config that today lives in `[.env](.env)` and [bridge/config.py](bridge/config.py):
+- **Settings page** to view/edit bridge config that today lives in `.env` and [bridge/config.py](bridge/config.py):
   - **GRID_API_KEY**, **GRID_WORKER_NAME**, **COMFYUI_URL** (required: “bring your own ComfyUI”)
   - **COMFYUI_BASE_PATH** (optional; for model downloads; auto-detected when possible)
   - Optional: **GRID_MODEL**(s), **WORKFLOW_FILE**, **GRID_NSFW**, **GRID_THREADS**, **MAX_PIXELS**, **WORKFLOW_DIR**
@@ -83,7 +83,7 @@ isProject: false
 
 ## 5. Download models for approved workflows (on-chain reference)
 
-Let users download the model files required by the bridge’s **approved workflows** (workflows in `WORKFLOW_FILE` or the default workflow map for advertised models). The source of truth for “which file, where to get it” is the **Grid model reference** (on-chain / official repo: [grid-image-model-reference](grid-image-model-reference/) or URL in `GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH`). That reference already has per–Grid-model `config.files` (path) and `config.download[]` (file_name, file_url).
+Let users download the model files required by the bridge’s **approved workflows** (workflows in `WORKFLOW_FILE` or the default workflow map for advertised models). The source of truth for “which file, where to get it” is the **Grid model reference** (on-chain / official repo: [grid-image-model-reference](../grid-image-model-reference/) or URL in `GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH`). That reference already has per–Grid-model `config.files` (path) and `config.download[]` (file_name, file_url).
 
 **Data flow:**
 

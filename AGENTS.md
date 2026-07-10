@@ -91,3 +91,5 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 
 - [bridge/AGENTS.md](bridge/AGENTS.md) — worker package: transport, mapping, templating, UI.
 - [workflows/AGENTS.md](workflows/AGENTS.md) — ComfyUI graph JSON templates.
+- [tests/AGENTS.md](tests/AGENTS.md) — worker transport, workflow, and utility
+  tests.
