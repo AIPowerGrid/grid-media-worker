@@ -33,7 +33,12 @@ except ImportError:  # pragma: no cover
 
 from .bridge import _view_url
 from .config import Settings
-from .model_mapper import initialize_model_mapper, get_horde_models, is_servable
+from .model_mapper import initialize_model_mapper, get_horde_models
+try:
+    from .model_mapper import is_servable
+except ImportError:  # older worker forks lack the servability gate — advertise as-is
+    def is_servable(_m):
+        return (True, "")
 from .workflow import build_workflow
 
 logger = logging.getLogger(__name__)
@@ -43,6 +48,15 @@ RECONNECT_DELAY_S = 5
 PROGRESS_INTERVAL = 2.0
 PREVIEW_INTERVAL = 1.5
 MAX_SEED = 2**53 - 1
+
+# 3D mesh outputs: TRELLIS's Trellis2ExportTrimesh writes the file to ComfyUI's
+# output dir and returns the path as a String output — it registers NOTHING in
+# /history outputs (unlike SaveImage/VHS). So for job_type=3d the worker reads the
+# newest mesh file from the output dir. Requires COMFYUI_OUTPUT_DIR (the bridge is
+# colocated with its ComfyUI). Jobs are serialized per worker, so "newest since
+# the prompt started" is unambiguous.
+_MESH_EXTS = (".glb", ".gltf", ".ply", ".obj", ".stl", ".3mf")
+COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", "").strip()
 
 
 def grid_ws_url() -> str:
@@ -128,6 +142,9 @@ class WSWorker:
         candidates = Settings.GRID_MODELS or get_horde_models()
         self.models = []
         for m in candidates:
+            if Settings.GRID_TRUST_MODELS:
+                self.models.append(m)  # recipe-served: grid supplies the graph, no local workflow
+                continue
             ok, reason = is_servable(m)
             if ok:
                 self.models.append(m)
@@ -158,7 +175,7 @@ class WSWorker:
                 "apikey": Settings.GRID_API_KEY,
                 "name": Settings.GRID_WORKER_NAME,
                 "models": self.models,
-                "job_types": ["image", "video"],
+                "job_types": Settings.GRID_JOB_TYPES,
                 "bridge_agent": BRIDGE_AGENT,
             }))
             ready = json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
@@ -207,6 +224,8 @@ class WSWorker:
         payload["seed"] = seeds[0]
         bridge_job = {"id": job_id, "model": msg["model"], "payload": payload}
 
+        job_type = msg.get("job_type", "image")
+        started_at = time.time()
         workflow = await build_workflow(bridge_job)
         resp = await self.comfy.post("/prompt", json={"prompt": workflow})
         if resp.status_code != 200:
@@ -217,7 +236,7 @@ class WSWorker:
 
         progress_task = asyncio.create_task(self._relay_progress(ws, job_id, prompt_id))
         try:
-            media_items = await self._collect_outputs(prompt_id)
+            media_items = await self._collect_outputs(prompt_id, job_type, started_at)
         finally:
             progress_task.cancel()
             try:
@@ -250,29 +269,63 @@ class WSWorker:
 
         await ws.send(json.dumps({"type": "done", "id": job_id, "results": results}))
 
-    async def _collect_outputs(self, prompt_id: str):
-        """Poll ComfyUI history until outputs exist; download them all."""
+    async def _collect_outputs(self, prompt_id: str, job_type: str = "image", started_at: float = 0.0):
+        """Poll ComfyUI history until the prompt finishes; return its outputs.
+
+        Image/video outputs are registered in /history and fetched via /view. 3D
+        mesh outputs are NOT in /history (TRELLIS's export node only writes to disk),
+        so for job_type=3d we read the newest mesh file from COMFYUI_OUTPUT_DIR once
+        the prompt completes."""
         media_items = []
         while True:
             hist = await self.comfy.get(f"/history/{prompt_id}")
             hist.raise_for_status()
             data = hist.json().get(prompt_id, {})
             outputs = data.get("outputs", {})
-            if outputs:
-                node_id, node_data = next(iter(outputs.items()))
+            # image/video: registered in history
+            for node_data in outputs.values():
                 for video_info in node_data.get("videos", []):
                     r = await self.comfy.get(_view_url(video_info))
                     r.raise_for_status()
                     media_items.append((r.content, "video", video_info["filename"]))
-                if media_items:
-                    return media_items
                 for img_info in node_data.get("images", []):
                     r = await self.comfy.get(_view_url(img_info))
                     r.raise_for_status()
                     media_items.append((r.content, "image", img_info["filename"]))
-                if media_items:
-                    return media_items
+            if media_items:
+                return media_items
+            # 3D: history carries no mesh; once the prompt is DONE, read from disk
+            status_done = bool(data.get("status", {}).get("completed")) or bool(outputs)
+            if job_type == "3d" and status_done:
+                mesh = self._read_newest_mesh(started_at)
+                if mesh:
+                    return [mesh]
+                raise RuntimeError(
+                    "3D job finished but no mesh found in COMFYUI_OUTPUT_DIR "
+                    f"({COMFYUI_OUTPUT_DIR or 'unset!'})")
             await asyncio.sleep(1)
+
+    def _read_newest_mesh(self, since_ts: float):
+        """Newest mesh file written to the ComfyUI output dir since the job started."""
+        if not COMFYUI_OUTPUT_DIR or not os.path.isdir(COMFYUI_OUTPUT_DIR):
+            return None
+        newest, newest_mtime = None, since_ts - 2  # small slack for clock skew
+        for root, _dirs, files in os.walk(COMFYUI_OUTPUT_DIR):
+            for fn in files:
+                if not fn.lower().endswith(_MESH_EXTS):
+                    continue
+                p = os.path.join(root, fn)
+                try:
+                    m = os.path.getmtime(p)
+                except OSError:
+                    continue
+                if m >= newest_mtime:
+                    newest, newest_mtime = p, m
+        if not newest:
+            return None
+        with open(newest, "rb") as f:
+            data = f.read()
+        return (data, "3d", os.path.basename(newest))
 
     async def _relay_progress(self, ws, job_id: str, prompt_id: str):
         """Forward ComfyUI progress + preview frames as v2 progress messages."""

@@ -10,6 +10,14 @@ class Settings:
     GRID_MODELS = [m.strip() for m in _GRID_MODELS_RAW.split(",") if m.strip()]
     GRID_WORKER_NAME = os.getenv("GRID_WORKER_NAME", "ComfyUI-Bridge-Worker")
     COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+    # Modalities this worker advertises. Default image+video; a TRELLIS box sets
+    # GRID_JOB_TYPES=3d (and GRID_MODEL=TRELLIS2). The grid routes by (model, job_type).
+    _GRID_JOB_TYPES_RAW = os.getenv("GRID_JOB_TYPES", "image,video")
+    GRID_JOB_TYPES = [t.strip() for t in _GRID_JOB_TYPES_RAW.split(",") if t.strip()]
+    # Recipe-served models (e.g. TRELLIS2) have no local workflow/checkpoint — the
+    # grid sends the graph (recipe_spec). Set GRID_TRUST_MODELS=true to advertise
+    # GRID_MODEL verbatim, skipping the local-workflow servability gate.
+    GRID_TRUST_MODELS = os.getenv("GRID_TRUST_MODELS", "false").lower() in ("1", "true", "yes")
     # Clean base (no /api) — the new prod nginx serves /v2 directly and the
     # WS worker derives /v1/workers/ws from this. A legacy /api tail is
     # tolerated and stripped where needed.
