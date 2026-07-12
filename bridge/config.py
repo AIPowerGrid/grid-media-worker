@@ -18,6 +18,10 @@ class Settings:
     # grid sends the graph (recipe_spec). Set GRID_TRUST_MODELS=true to advertise
     # GRID_MODEL verbatim, skipping the local-workflow servability gate.
     GRID_TRUST_MODELS = os.getenv("GRID_TRUST_MODELS", "false").lower() in ("1", "true", "yes")
+    # Preflight: before advertising a model, fetch its recipe from the grid, check the
+    # nodes+files are present in ComfyUI, and SMOKE-RUN it. Advertise only what actually
+    # runs E2E. Supersedes GRID_TRUST_MODELS (earned trust vs blind trust).
+    GRID_PREFLIGHT = os.getenv("GRID_PREFLIGHT", "false").lower() in ("1", "true", "yes")
     # Clean base (no /api) — the new prod nginx serves /v2 directly and the
     # WS worker derives /v1/workers/ws from this. A legacy /api tail is
     # tolerated and stripped where needed.

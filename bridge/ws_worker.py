@@ -142,12 +142,18 @@ class WSWorker:
         candidates = Settings.GRID_MODELS or get_horde_models()
         self.models = []
         for m in candidates:
-            if Settings.GRID_TRUST_MODELS:
-                self.models.append(m)  # recipe-served: grid supplies the graph, no local workflow
-                continue
-            ok, reason = is_servable(m)
+            if Settings.GRID_PREFLIGHT:
+                from .preflight import preflight_model
+                logger.info(f"Preflighting '{m}' (nodes + files + smoke run)…")
+                ok, reason = await preflight_model(
+                    m, Settings.GRID_API_URL, Settings.GRID_API_KEY, Settings.COMFYUI_URL)
+            elif Settings.GRID_TRUST_MODELS:
+                ok, reason = True, "trusted (GRID_TRUST_MODELS)"
+            else:
+                ok, reason = is_servable(m)
             if ok:
                 self.models.append(m)
+                logger.info(f"Advertising '{m}' — {reason}")
             else:
                 logger.warning(f"Refusing to advertise '{m}': {reason}")
         if not self.models:
