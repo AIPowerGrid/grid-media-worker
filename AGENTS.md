@@ -46,6 +46,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 
 - `bridge/` — the worker package: transport, model→workflow mapping, graph templating,
   control UI, and signed worker profiles. Owned in its own AGENTS.md.
+- `deploy/` — Linux service wiring for signed managed audio workers. Owned in
+  its own AGENTS.md.
 - `workflows/` — ComfyUI graph JSON templates the worker fills per job. Owned in its own AGENTS.md.
 - `tests/` — pytest suite (`respx` HTTP mocking, `pytest-asyncio`). Covers `api_client`,
   `workflow`, `utils`, preview.
@@ -114,6 +116,7 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 ## Child DOX Index
 
 - [bridge/AGENTS.md](bridge/AGENTS.md) — worker package: transport, mapping, templating, UI.
+- [deploy/AGENTS.md](deploy/AGENTS.md) — persistent signed audio-worker service.
 - [workflows/AGENTS.md](workflows/AGENTS.md) — ComfyUI graph JSON templates.
 - [tests/AGENTS.md](tests/AGENTS.md) — worker transport, workflow, and utility
   tests.

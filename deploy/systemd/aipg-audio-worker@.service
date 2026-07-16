@@ -1,0 +1,46 @@
+[Unit]
+Description=AI Power Grid managed audio worker (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+WorkingDirectory=/home/%i
+UMask=0077
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/local/bin/grid-media-manager \
+    --profile /etc/aipg/audio-worker.profile.json \
+    serve \
+    --install-root /home/%i/.aipg/media-worker/install \
+    --state /home/%i/.aipg/media-worker/state/active-worker-state.json \
+    --credentials /home/%i/.aipg/media-worker/state/audio-worker-credentials.json \
+    --key /home/%i/.aipg/media-worker/state/audio-worker-key.json \
+    --delegation /home/%i/.aipg/media-worker/state/audio-worker-delegation.json
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/.aipg/media-worker
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectHostname=true
+LockPersonality=true
+RemoveIPC=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
