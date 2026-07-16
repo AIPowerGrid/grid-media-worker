@@ -11,10 +11,11 @@ def main():
     )
 
     import uvicorn
+    from .config import Settings
     from .web.app import app  # noqa: F401 — triggers route registration
 
-    host = "0.0.0.0"
-    port = 7860
+    host = Settings.BRIDGE_HOST
+    port = Settings.BRIDGE_PORT
 
     logger.info(f"Starting Comfy Bridge on http://{host}:{port}")
     try:

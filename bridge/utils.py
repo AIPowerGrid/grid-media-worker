@@ -1,16 +1,15 @@
 from typing import Any, Union
 import base64
-import random
-import os
+import secrets
 
 
 def generate_seed(provided: Any) -> int:
     try:
         v = int(provided)
         # Accept any valid seed value >= 0, only generate random for None/invalid
-        return v if v >= 0 else random.randint(1, 2**32 - 1)
+        return v if v >= 0 else secrets.randbelow(2**32 - 1) + 1
     except Exception:
-        return random.randint(1, 2**32 - 1)
+        return secrets.randbelow(2**32 - 1) + 1
 
 
 def encode_media(data: Union[str, bytes], media_type: str = "media") -> str:

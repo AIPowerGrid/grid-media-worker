@@ -5,6 +5,10 @@ load_dotenv()
 
 
 class Settings:
+    # The local setup UI is private by default. Operators who place it behind
+    # their own authenticated proxy may opt into a wider bind explicitly.
+    BRIDGE_HOST = os.getenv("BRIDGE_HOST", "127.0.0.1").strip()
+    BRIDGE_PORT = int(os.getenv("BRIDGE_PORT", "7860"))
     GRID_API_KEY = os.getenv("GRID_API_KEY", "")
     _GRID_MODELS_RAW = os.getenv("GRID_MODEL", "")
     GRID_MODELS = [m.strip() for m in _GRID_MODELS_RAW.split(",") if m.strip()]
@@ -36,6 +40,30 @@ class Settings:
     # v2 WebSocket worker protocol (push dispatch + presigned R2 uploads).
     # Off by default until the v2 API is the production default deployment.
     GRID_WS = os.getenv("GRID_WS", "false").lower() == "true"
+    # Optional signed managed profile. When set, models/job types come only from
+    # matching signed install state whose canary passed; GRID_MODEL/JOB_TYPES do
+    # not override it. The profile path is intentionally opt-in while V1 is draft.
+    GRID_PROFILE_PATH = os.getenv("GRID_PROFILE_PATH", "").strip()
+    GRID_PROFILE_STATE_PATH = os.getenv(
+        "GRID_PROFILE_STATE_PATH",
+        os.path.expanduser("~/.aipg/media-worker/profile-state.json"),
+    ).strip()
+    GRID_WORKER_KEY_PATH = os.getenv(
+        "GRID_WORKER_KEY_PATH",
+        os.path.expanduser("~/.aipg/media-worker/worker-key.json"),
+    ).strip()
+    GRID_WORKER_DELEGATION_PATH = os.getenv(
+        "GRID_WORKER_DELEGATION_PATH",
+        os.path.expanduser("~/.aipg/media-worker/delegation.json"),
+    ).strip()
+    GRID_WORKER_IDENTITY_AUDIENCE = os.getenv(
+        "GRID_WORKER_IDENTITY_AUDIENCE", "api.aipowergrid.io"
+    ).strip().lower()
+    GRID_WORKER_IDENTITY_CHAIN_ID = int(os.getenv("GRID_WORKER_IDENTITY_CHAIN_ID", "8453"))
+    ACE_STEP_API_URL = os.getenv("ACE_STEP_API_URL", "http://127.0.0.1:8001").strip()
+    ACE_STEP_API_KEY = os.getenv("ACE_STEP_API_KEY", "").strip()
+    # Keep this below Core's worker receive and client response deadlines.
+    ACE_STEP_JOB_TIMEOUT = int(os.getenv("ACE_STEP_JOB_TIMEOUT", "1800"))
     NSFW = os.getenv("GRID_NSFW", "false").lower() == "true"
     THREADS = int(os.getenv("GRID_THREADS", "1"))
     MAX_PIXELS = int(os.getenv("GRID_MAX_PIXELS", "20971520"))

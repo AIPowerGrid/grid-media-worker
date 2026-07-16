@@ -8,6 +8,8 @@ from .utils import generate_seed
 from .model_mapper import get_workflow_file
 from .config import Settings
 
+MAX_SOURCE_IMAGE_BYTES = 12 * 1024 * 1024
+
 
 def _set_graph_path(spec: Dict[str, Any], path: str, value: Any) -> None:
     """Set a value at a dotted ComfyUI graph path like '81.inputs.image'.
@@ -73,25 +75,17 @@ async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) ->
 
 async def download_image(url: str, filename: str) -> str:
     """Download image from URL and upload it to ComfyUI via API"""
-    # Download the image to a temporary file
-    temp_dir = "/tmp/comfyui_inputs"
-    os.makedirs(temp_dir, exist_ok=True)
-    temp_filepath = os.path.join(temp_dir, filename)
-
-    async with httpx.AsyncClient() as client:
-        # Download the image
+    async with httpx.AsyncClient(timeout=60.0) as client:
         response = await client.get(url)
         response.raise_for_status()
+        content = response.content
+        if not content or len(content) > MAX_SOURCE_IMAGE_BYTES:
+            raise RuntimeError("source image is empty or exceeds 12 MB")
 
-        with open(temp_filepath, "wb") as f:
-            f.write(response.content)
-
-        # Upload to ComfyUI via API
         upload_url = f"{Settings.COMFYUI_URL}/upload/image"
-        with open(temp_filepath, "rb") as f:
-            files = {"image": (filename, f, "image/png")}
-            upload_response = await client.post(upload_url, files=files)
-            upload_response.raise_for_status()
+        files = {"image": (filename, content, "image/png")}
+        upload_response = await client.post(upload_url, files=files)
+        upload_response.raise_for_status()
 
     print(f"Downloaded and uploaded image: {filename}")
     return filename
@@ -219,7 +213,7 @@ async def process_workflow(
             print(f"Failed to download source image: {e}")
             source_image_filename = None
     else:
-        print(f"Skipping image download - this is a text-to-image job")
+        print("Skipping image download - this is a text-to-image job")
 
     # Try to use _bridge metadata first (clean explicit mappings)
     if apply_bridge_metadata(processed_workflow, job):

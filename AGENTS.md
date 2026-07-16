@@ -45,13 +45,21 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 ## Ownership
 
 - `bridge/` — the worker package: transport, model→workflow mapping, graph templating,
-  control UI. Owned in its own AGENTS.md.
+  control UI, and signed worker profiles. Owned in its own AGENTS.md.
 - `workflows/` — ComfyUI graph JSON templates the worker fills per job. Owned in its own AGENTS.md.
 - `tests/` — pytest suite (`respx` HTTP mocking, `pytest-asyncio`). Covers `api_client`,
   `workflow`, `utils`, preview.
 - Top-level loose files (`*.json`, `enhanced_reference.json`, `*.html`, `prepare_release.py`,
   `workflow_git_export.py`, `check_connections.py`) are sample workflows, the model
   reference, and dev/release helpers — not part of the worker runtime.
+- `profile_release.py` is the offline-only final profile signer. It binds a
+  RecipeVault-registered root plus verified three-class qualification evidence
+  and accepts only a private `0600` Ed25519 PEM; it is never bundled into the
+  public manager executable.
+- `manager_entry.py` and `.github/workflows/manager-build.yml` build and smoke-test
+  standalone manager executables. Tagged Linux/Windows builds require an active,
+  signed, RecipeVault-bound profile before they can assemble a checksummed,
+  provenance-attested draft GitHub Release; CI never publishes that draft.
 
 ## Local Contracts
 
@@ -74,6 +82,14 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   R2 URLs from the job message. The legacy path returns base64 if no R2 URL is present.
 - **All config is env-driven** through `bridge/config.py` (`Settings`); the UI persists changes
   to `.env`. `GRID_API_KEY` is required.
+- **Worker profiles are fail-closed:** `bridge/profiles/` validates signed,
+  immutable installation manifests and evaluates hardware locally. Unsigned
+  drafts require an explicit development override and never unlock advertised
+  capabilities by themselves.
+- **The standalone manager UI is local:** running the manager without arguments
+  opens the loopback-only port 8791 control surface. It supervises the same CLI
+  lifecycle commands and cannot bypass profile signature, canary, enrollment,
+  or capability-advertisement gates.
 
 ## Work Guidance
 
@@ -86,6 +102,12 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 ## Verification
 
 - `pytest tests/` — CI runs it on Python 3.10–3.12 (`.github/workflows/test.yml`).
+- Release packaging: install `.[release]`, build `grid-media-manager.spec`, then
+  run `--help`, unsigned-draft inspection, and temporary worker-key generation
+  against the resulting executable. The spec embeds pinned `uv`; build outputs
+  remain ignored except for the reviewed spec itself.
+- A release tag is not public approval. The assembled GitHub Release stays draft
+  until hardware reports, platform signing, and supervised staging are reviewed.
 
 ## Child DOX Index
 

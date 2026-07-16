@@ -26,13 +26,28 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
 - **Detection/UI:** `comfyui_detect.py` (find/install ComfyUI for the wizard); `web/` — control
   UI, owned in its own AGENTS.md.
+- **Managed profiles:** `profiles/` - signed declarative manifests, artifact
+  commitments, local hardware detection, and recommendation. Owned in its own
+  AGENTS.md.
 - `utils.py` — seed + media encoding helpers. `cli.py` — console entry; launches the web app.
+- `manager_cli.py` - `grid-media-manager` profile lifecycle, worker identity,
+  runtime supervision, serve commands, and loopback manager-UI entry point.
+- `enrollment.py` - crash-resumable Console pairing. The candidate worker API
+  key and poll token originate locally and remain in a `0600` pending file;
+  returned delegation certificates must match signer, name, chain, and audience
+  before credentials are promoted and ACKed.
+- `audio_runtime.py` / `runtime_process.py` - constrained loopback ACE-Step API
+  execution and shell-free child-process supervision.
+- `identity.py` - funds-less worker key, payout-wallet delegation, registration
+  proof, and signed job receipts.
 
 ## Local Contracts
 
 - Both transports share `build_workflow`, `model_mapper`, and `Settings` — keep payload
   adaptation in the transport layer, not in `workflow.py`.
 - The worker never holds storage credentials (WS uploads to presigned slots; see root contract).
+- Worker credentials may cross only `wss://` outside loopback. Plaintext remote
+  WebSockets require the explicit development-only `GRID_WS_INSECURE` override.
 - Progress/preview relay is best-effort and throttled; a dropped frame must never fail a job.
 - `cli.main` starts the FastAPI app; the worker runs as a background task inside its lifespan,
   selected by `Settings.GRID_WS`. There is no separate worker-only entry point.
@@ -44,6 +59,14 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 - Adding a model → mapping in `model_mapper.py` + graph under `../workflows/`; advertise only
   what resolves (root contract).
 - Config → add to `Settings`; do not scatter `os.getenv` elsewhere.
+- Managed-profile mode requires an active signed profile, matching install
+  state, and a passed runtime-specific canary. The profile's capabilities
+  replace manual model/job-type declarations; direct ACE-Step readiness replaces
+  generic ComfyUI preflight.
+- Managed ACE-Step processes run with model-hub offline mode and may launch only
+  after the pinned source and exact checkpoint tree revalidate locally.
+- A pending enrollment remains authoritative until Core activation is ACKed.
+  Existing credential files must not short-circuit a pending ACK retry.
 
 ## Verification
 
@@ -52,3 +75,5 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 ## Child DOX Index
 
 - [web/AGENTS.md](web/AGENTS.md) — FastAPI setup wizard + dashboard control UI.
+- [profiles/AGENTS.md](profiles/AGENTS.md) - signed install profiles and local
+  compatibility evaluation.

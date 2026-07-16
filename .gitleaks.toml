@@ -46,6 +46,7 @@ tags = ["aipg", "wallet"]
 [allowlist]
 description = "Non-secret placeholders, lockfiles, and the scanner's own config"
 paths = [
+  '''(?i)(^|/)(\.venv|venv|node_modules|__pycache__|\.pytest_cache|\.ruff_cache|dist|build)(/|$)''',
   '''(?i)\.env\.(example|template|sample)$''',
   '''(?i)(^|/)(examples?|samples?)/''',
   '''(?i)\.(lock)$''',

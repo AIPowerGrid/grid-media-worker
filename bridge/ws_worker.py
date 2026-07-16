@@ -19,10 +19,11 @@ import base64
 import hashlib
 import json
 import os
+import secrets
 import ssl
 import logging
-import random
 import time
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -76,6 +77,19 @@ def grid_ws_url() -> str:
     if url.endswith("/api"):
         url = url[:-4]
     url = url.replace("https://", "wss://").replace("http://", "ws://")
+    if url.startswith("ws://"):
+        hostname = (urlsplit(url).hostname or "").lower()
+        loopback = hostname in {"127.0.0.1", "localhost", "::1"}
+        if not loopback and not getattr(Settings, "GRID_WS_INSECURE", False):
+            raise RuntimeError(
+                "refusing plaintext worker WebSocket outside loopback; use HTTPS "
+                "or explicitly set GRID_WS_INSECURE=1 for local development"
+            )
+        if not loopback:
+            logger.warning(
+                "GRID_WS_INSECURE=1 permits a plaintext worker WebSocket; "
+                "the API key is not protected in transit"
+            )
     return f"{url}/v1/workers/ws"
 
 
@@ -123,26 +137,63 @@ def resolve_output_seeds(payload: dict, n: int) -> list[int]:
     if base is not None:
         return [(base + i) % (MAX_SEED + 1) for i in range(count)]
 
-    return [random.randint(0, MAX_SEED) for _ in range(count)]
+    return [secrets.randbelow(MAX_SEED + 1) for _ in range(count)]
+
+
+def media_result_hash(results: list[dict], recipe_root: str | None = None) -> str:
+    """Match Core's canonical commitment, binding audio to its recipe root."""
+    values = [item["sha256"] for item in sorted(results, key=lambda item: item["index"])]
+    commitment = {"outputs": values, "recipe_root": recipe_root} if recipe_root else values
+    encoded = json.dumps(commitment, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode()).hexdigest()
 
 
 class WSWorker:
     def __init__(self):
         self.comfy = httpx.AsyncClient(base_url=Settings.COMFYUI_URL, timeout=300)
         self.models: list[str] = []
+        self.job_types: list[str] = list(Settings.GRID_JOB_TYPES)
+        self.profile_metadata: dict | None = None
+        self.profile: dict | None = None
 
     async def run(self):
         if websockets is None:
             raise RuntimeError("websockets package required for GRID_WS mode")
-        await initialize_model_mapper(Settings.COMFYUI_URL)
         # Advertise-only-what-you-can-serve gate. Applies to an explicit
         # GRID_MODEL override too — a worker must never advertise a model whose
         # workflow is missing or whose weights aren't loaded in ComfyUI (that's
         # what made this box advertise LTX-2.3 and 502 every job).
         candidates = Settings.GRID_MODELS or get_horde_models()
+        if Settings.GRID_PROFILE_PATH:
+            from .profiles.advertisement import load_profile_advertisement
+            from .profiles.profile import load_profile
+
+            advertisement = load_profile_advertisement(
+                Settings.GRID_PROFILE_PATH,
+                Settings.GRID_PROFILE_STATE_PATH,
+            )
+            candidates = list(advertisement.models)
+            self.job_types = list(advertisement.job_types)
+            self.profile_metadata = dict(advertisement.metadata)
+            self.profile = dict(load_profile(Settings.GRID_PROFILE_PATH).profile)
+        direct_audio = bool(
+            self.profile and self.profile["runtime"]["adapter"] == "ace-step-1.5-api"
+        )
+        if direct_audio:
+            from .audio_runtime import check_ace_step_runtime
+
+            await check_ace_step_runtime(
+                Settings.ACE_STEP_API_URL,
+                self.profile["runtime"]["model"],
+                api_key=Settings.ACE_STEP_API_KEY,
+            )
+        else:
+            await initialize_model_mapper(Settings.COMFYUI_URL)
         self.models = []
         for m in candidates:
-            if Settings.GRID_PREFLIGHT:
+            if direct_audio:
+                ok, reason = True, "signed profile canary + local ACE-Step readiness"
+            elif Settings.GRID_PREFLIGHT:
                 from .preflight import preflight_model
                 logger.info(f"Preflighting '{m}' (nodes + files + smoke run)…")
                 ok, reason = await preflight_model(
@@ -177,13 +228,7 @@ class WSWorker:
         url = grid_ws_url()
         logger.info(f"Connecting to {url} ...")
         async with websockets.connect(url, ssl=grid_ws_ssl(url), ping_interval=30, ping_timeout=10) as ws:
-            await ws.send(json.dumps({
-                "apikey": Settings.GRID_API_KEY,
-                "name": Settings.GRID_WORKER_NAME,
-                "models": self.models,
-                "job_types": Settings.GRID_JOB_TYPES,
-                "bridge_agent": BRIDGE_AGENT,
-            }))
+            await ws.send(json.dumps(self.registration_payload()))
             ready = json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
             if ready.get("type") != "ready":
                 raise RuntimeError(f"Registration rejected: {ready}")
@@ -200,6 +245,34 @@ class WSWorker:
                     logger.info(f"Job {msg.get('id')} acked, den={msg.get('den')}")
                 elif mtype == "error":
                     logger.error(f"Server error: {msg.get('message')}")
+
+    def registration_payload(self) -> dict:
+        payload = {
+            "apikey": Settings.GRID_API_KEY,
+            "name": Settings.GRID_WORKER_NAME,
+            "models": self.models,
+            "job_types": self.job_types,
+            "bridge_agent": BRIDGE_AGENT,
+        }
+        if self.profile_metadata is not None:
+            payload["worker_profile"] = self.profile_metadata
+        identity_paths_exist = os.path.exists(Settings.GRID_WORKER_KEY_PATH) and os.path.exists(
+            Settings.GRID_WORKER_DELEGATION_PATH
+        )
+        if self.profile_metadata is not None or identity_paths_exist:
+            from .identity import build_registration_proof
+
+            payload["worker_identity"] = build_registration_proof(
+                worker_key_path=Settings.GRID_WORKER_KEY_PATH,
+                delegation_path=Settings.GRID_WORKER_DELEGATION_PATH,
+                worker_name=Settings.GRID_WORKER_NAME,
+                models=self.models,
+                job_types=self.job_types,
+                bridge_agent=BRIDGE_AGENT,
+                profile_digest=(self.profile_metadata or {}).get("digest"),
+                profile_recipe_root=(self.profile_metadata or {}).get("recipe_root"),
+            )
+        return payload
 
     # ── Job handling ──────────────────────────────────────────────────
 
@@ -232,23 +305,40 @@ class WSWorker:
 
         job_type = msg.get("job_type", "image")
         started_at = time.time()
-        workflow = await build_workflow(bridge_job)
-        resp = await self.comfy.post("/prompt", json={"prompt": workflow})
-        if resp.status_code != 200:
-            raise RuntimeError(f"ComfyUI rejected workflow: {resp.text[:200]}")
-        prompt_id = resp.json().get("prompt_id")
-        if not prompt_id:
-            raise RuntimeError("No prompt_id from ComfyUI")
+        if job_type == "audio":
+            if not self.profile:
+                raise RuntimeError("audio jobs require an active signed worker profile")
+            expected_root = self.profile["recipe"]["sha256"]
+            if payload.get("recipe_root") != expected_root:
+                raise RuntimeError("audio job recipe root does not match the signed profile")
+            from .audio_runtime import generate_ace_step_audio
 
-        progress_task = asyncio.create_task(self._relay_progress(ws, job_id, prompt_id))
-        try:
-            media_items = await self._collect_outputs(prompt_id, job_type, started_at)
-        finally:
-            progress_task.cancel()
+            generated = await generate_ace_step_audio(
+                Settings.ACE_STEP_API_URL,
+                payload,
+                self.profile["recipe"]["spec"],
+                api_key=Settings.ACE_STEP_API_KEY,
+                timeout_seconds=Settings.ACE_STEP_JOB_TIMEOUT,
+            )
+            media_items = [(generated.content, "audio", generated.filename)]
+        else:
+            workflow = await build_workflow(bridge_job)
+            resp = await self.comfy.post("/prompt", json={"prompt": workflow})
+            if resp.status_code != 200:
+                raise RuntimeError(f"ComfyUI rejected workflow: {resp.text[:200]}")
+            prompt_id = resp.json().get("prompt_id")
+            if not prompt_id:
+                raise RuntimeError("No prompt_id from ComfyUI")
+
+            progress_task = asyncio.create_task(self._relay_progress(ws, job_id, prompt_id))
             try:
-                await progress_task
-            except (asyncio.CancelledError, Exception):
-                pass
+                media_items = await self._collect_outputs(prompt_id, job_type, started_at)
+            finally:
+                progress_task.cancel()
+                try:
+                    await progress_task
+                except (asyncio.CancelledError, Exception):
+                    pass
 
         # Upload each output to its presigned slot, hash for the receipt.
         results = []
@@ -273,7 +363,19 @@ class WSWorker:
         if not results:
             raise RuntimeError("Generation produced no outputs")
 
-        await ws.send(json.dumps({"type": "done", "id": job_id, "results": results}))
+        recipe_root = payload.get("recipe_root") if job_type == "audio" else None
+        done = {"type": "done", "id": job_id, "results": results}
+        if recipe_root:
+            done["recipe_root"] = recipe_root
+        if os.path.exists(Settings.GRID_WORKER_KEY_PATH):
+            from .identity import sign_job_result
+
+            done["worker_sig"] = sign_job_result(
+                Settings.GRID_WORKER_KEY_PATH,
+                job_id,
+                media_result_hash(results, recipe_root),
+            )
+        await ws.send(json.dumps(done))
 
     async def _collect_outputs(self, prompt_id: str, job_type: str = "image", started_at: float = 0.0):
         """Poll ComfyUI history until the prompt finishes; return its outputs.

@@ -1,0 +1,280 @@
+{
+  "schema_version": "worker-profile-v1",
+  "profile": {
+    "id": "ace-step-v1.5-turbo",
+    "version": "0.1.0",
+    "status": "draft",
+    "display_name": "ACE-Step 1.5 Turbo Audio Worker",
+    "model": {
+      "id": "ace-step-v1.5-turbo",
+      "upstream": "https://huggingface.co/ACE-Step/Ace-Step1.5",
+      "revision": "19671f406d603126926c1b7e2adc169acbcade22"
+    },
+    "license": {
+      "spdx": "MIT",
+      "url": "https://github.com/ace-step/ACE-Step-1.5/blob/6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0/LICENSE"
+    },
+    "platforms": [
+      {
+        "os": "linux",
+        "architectures": ["x86_64"],
+        "accelerator": {
+          "vendor": "nvidia",
+          "minimum_driver": "570.26",
+          "recommended_driver": "570.86.15"
+        }
+      },
+      {
+        "os": "windows",
+        "architectures": ["x86_64"],
+        "accelerator": {
+          "vendor": "nvidia",
+          "minimum_driver": "570.65",
+          "recommended_driver": "572.61"
+        }
+      }
+    ],
+    "hardware": {
+      "minimum_tier": "audio.ace-step.base",
+      "recommended_tier": "audio.ace-step.standard",
+      "minimum": {
+        "vram_mb": 6144,
+        "ram_mb": 16384,
+        "disk_free_mb": 24576
+      },
+      "recommended": {
+        "vram_mb": 12288,
+        "ram_mb": 32768,
+        "disk_free_mb": 32768
+      }
+    },
+    "release_qualification": {
+      "policy_version": 1,
+      "required_classes": ["minimum", "midrange", "datacenter"],
+      "runs_per_class": 3,
+      "datacenter_min_vram_mb": 80000,
+      "evidence": null
+    },
+    "runtime": {
+      "adapter": "ace-step-1.5-api",
+      "model": "acestep-v15-turbo",
+      "python": "3.12.13",
+      "cuda": "12.8",
+      "resource_policy": "upstream-vram-auto-v1",
+      "source_artifact": "ace-step-runtime",
+      "lock_sha256": "0a9c8067b3299bfc6881a06e097ff95e55e1b7bb8f9d1f84192ac23e59b995ab",
+      "digest": "7571cec88e676620b178a6aa03d8326da8381d65a7001d592a5238d8a1b50743"
+    },
+    "artifacts": [
+      {
+        "id": "ace-step-runtime",
+        "kind": "tar_archive",
+        "source": "https://codeload.github.com/ace-step/ACE-Step-1.5/tar.gz/6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0",
+        "revision": "6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0",
+        "sha256": "fc563d1e5c2f17733668692d2ff1a4507e44c903857b11e22108233fb3636b12",
+        "size": 8421774,
+        "unpacked_size": 19109821,
+        "strip_components": 1,
+        "destination": "runtimes/ace-step-1.5"
+      },
+      {
+        "id": "ace-step-model-snapshot",
+        "kind": "huggingface_snapshot",
+        "source": "https://huggingface.co/ACE-Step/Ace-Step1.5",
+        "revision": "19671f406d603126926c1b7e2adc169acbcade22",
+        "destination": "runtimes/ace-step-1.5/checkpoints",
+        "files": [
+          {
+            "path": ".gitattributes",
+            "size": 1740,
+            "sha256": "0a013ab5b4ca453b13b3a7b68978a2d5364eb956d2bac03d4e63225f274a6d68"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/added_tokens.json",
+            "size": 707,
+            "sha256": "c0284b582e14987fbd3d5a2cb2bd139084371ed9acbae488829a1c900833c680"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/chat_template.jinja",
+            "size": 4116,
+            "sha256": "87a2728cb8dc9fe424d624542f6060ec05a1d285ebbec578bb078900e33396b5"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/config.json",
+            "size": 1359,
+            "sha256": "bb23c1607cfe059a58d8f0196cf1cebb52082b1056b8e358a579da80a5759420"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/merges.txt",
+            "size": 1671853,
+            "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/model.safetensors",
+            "size": 1191586416,
+            "sha256": "0437e45c94563b09e13cb7a64478fc406947a93cb34a7e05870fc8dcd48e23fd"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/special_tokens_map.json",
+            "size": 613,
+            "sha256": "76862e765266b85aa9459767e33cbaf13970f327a0e88d1c65846c2ddd3a1ecd"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/tokenizer.json",
+            "size": 11423705,
+            "sha256": "def76fb086971c7867b829c23a26261e38d9d74e02139253b38aeb9df8b4b50a"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/tokenizer_config.json",
+            "size": 5404,
+            "sha256": "443bfa629eb16387a12edbf92a76f6a6f10b2af3b53d87ba1550adfcf45f7fa0"
+          },
+          {
+            "path": "Qwen3-Embedding-0.6B/vocab.json",
+            "size": 2776833,
+            "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/added_tokens.json",
+            "size": 2217787,
+            "sha256": "db08b66a515fb5d6acca0b3492d25bb44e0deda6241fc1113ac0679d40558c48"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/chat_template.jinja",
+            "size": 4168,
+            "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/config.json",
+            "size": 1385,
+            "sha256": "73515ca4bfd86a5b56f28bf680311d1911e159c85d7f7ceb2188e310007c9010"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/merges.txt",
+            "size": 1671853,
+            "sha256": "8831e4f1a044471340f7c0a83d7bd71306a5b867e95fd870f74d0c5308a904d5"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/model.safetensors",
+            "size": 3708521528,
+            "sha256": "f161689da73e5ecefa28ff780d51c2d92a00f056d021d7933c779ed5c6cd7db8"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/special_tokens_map.json",
+            "size": 1824199,
+            "sha256": "76e233bfc357b0b03d7b6e6ba8e799244f358552575a7cdadb78d3d19106b298"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/tokenizer.json",
+            "size": 24321939,
+            "sha256": "35af56c3f5cb3ea2cc578aa28a8937770981d504f183ac5c8c38baf4bbd4af4d"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/tokenizer_config.json",
+            "size": 14072925,
+            "sha256": "6cd70cdd89425971794f5235562edcc608b0629a6c4686ae51a8b8c8b8ba5e95"
+          },
+          {
+            "path": "acestep-5Hz-lm-1.7B/vocab.json",
+            "size": 2776833,
+            "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
+          },
+          {
+            "path": "README.md",
+            "size": 5496,
+            "sha256": "69d69b89e313706b93b420b13aa6232259b207a1cd19b0b70358d166e8e451a0"
+          },
+          {
+            "path": "acestep-v15-turbo/config.json",
+            "size": 1968,
+            "sha256": "74745ff704ea49164c3d2d1c99fc0670f3fc635a869f0aec2d1311e6a52d400a"
+          },
+          {
+            "path": "acestep-v15-turbo/configuration_acestep_v15.py",
+            "source": "https://raw.githubusercontent.com/ace-step/ACE-Step-1.5/6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0/acestep/models/turbo/configuration_acestep_v15.py",
+            "size": 212,
+            "sha256": "5f15aa79fe793bba3c00b6992dd193a269954950603d5031ecd7703b0fa69da1"
+          },
+          {
+            "path": "acestep-v15-turbo/model.safetensors",
+            "size": 4787825604,
+            "sha256": "3f6e0797fad420a39bd33979eb6e840e30989e34a3794e843d23b60ec6e422d7"
+          },
+          {
+            "path": "acestep-v15-turbo/modeling_acestep_v15_turbo.py",
+            "source": "https://raw.githubusercontent.com/ace-step/ACE-Step-1.5/6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0/acestep/models/turbo/modeling_acestep_v15_turbo.py",
+            "size": 108712,
+            "sha256": "71b22e01b490bd9e149e4c0c5da2e1f512126f3ab3316e0ae97779af84d19512"
+          },
+          {
+            "path": "acestep-v15-turbo/silence_latent.pt",
+            "size": 3841215,
+            "sha256": "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b"
+          },
+          {
+            "path": "config.json",
+            "size": 1968,
+            "sha256": "74745ff704ea49164c3d2d1c99fc0670f3fc635a869f0aec2d1311e6a52d400a"
+          },
+          {
+            "path": "vae/config.json",
+            "size": 425,
+            "sha256": "14e019904df567f26df750317a70e2bd08f9f8f3c40ff4a24c97d1cd3f20ccd2"
+          },
+          {
+            "path": "vae/diffusion_pytorch_model.safetensors",
+            "size": 337431388,
+            "sha256": "da17edb604c40deaf09e9b24974e590d1ca83a374070e5d0884cfa4bed9a99b0"
+          }
+        ]
+      }
+    ],
+    "recipe": {
+      "id": "ace-step-v1.5-text2music",
+      "format": "ace-step-api-template-v1",
+      "sha256": "21e6572ec04f315bea7089080797f55c7836da0707417b39f505f5ac5b54235f",
+      "onchain_root": null,
+      "spec": {
+        "adapter": "ace-step-api-audio-v1",
+        "fixed": {
+          "audio_format": "wav",
+          "batch_size": 1,
+          "model": "acestep-v15-turbo",
+          "sample_mode": false,
+          "thinking": false,
+          "use_cot_caption": false,
+          "use_cot_language": false,
+          "use_format": false,
+          "use_random_seed": false
+        },
+        "limits": {
+          "audio_duration": [10, 300],
+          "inference_steps": [1, 20],
+          "lyrics_chars": 20000,
+          "prompt_chars": 2000
+        },
+        "variables": ["prompt", "lyrics", "audio_duration", "inference_steps", "seed"]
+      }
+    },
+    "core_compatibility": {
+      "worker_protocol": "grid-worker-ws",
+      "minimum_protocol_version": 1
+    },
+    "capabilities_after_validation": [
+      {
+        "model": "ace-step-v1.5-turbo",
+        "job_types": ["audio"],
+        "output_mime_types": ["audio/wav", "audio/flac"]
+      }
+    ],
+    "canary": {
+      "adapter": "ace-step-api-audio-v1",
+      "prompt": "instrumental electronic pulse with a clean four-beat rhythm",
+      "seconds": 10,
+      "seed": 15012026,
+      "timeout_seconds": 600,
+      "expected_mime_type": "audio/wav"
+    }
+  },
+  "signature": null
+}

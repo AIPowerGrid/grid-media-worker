@@ -1,0 +1,342 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aipowergrid.io/schemas/worker-profile-v1.json",
+  "title": "AI Power Grid Worker Profile V1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile", "signature"],
+  "properties": {
+    "schema_version": {"const": "worker-profile-v1"},
+    "profile": {"$ref": "#/$defs/profile"},
+    "signature": {
+      "oneOf": [
+        {"type": "null"},
+        {"$ref": "#/$defs/signature"}
+      ]
+    }
+  },
+  "$defs": {
+    "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "gitCommit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(^|/)\\.\\.(/|$)).+$"
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": {"const": "ed25519"},
+        "key_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"},
+        "value": {"type": "string", "minLength": 80, "maxLength": 100}
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "version", "status", "display_name", "model", "license",
+        "platforms", "hardware", "release_qualification", "runtime", "artifacts", "recipe",
+        "core_compatibility", "capabilities_after_validation", "canary"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"},
+        "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+        "status": {"enum": ["draft", "active", "revoked"]},
+        "display_name": {"type": "string", "minLength": 3, "maxLength": 100},
+        "model": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "upstream", "revision"],
+          "properties": {
+            "id": {"type": "string", "minLength": 1, "maxLength": 128},
+            "upstream": {"type": "string", "format": "uri", "pattern": "^https://"},
+            "revision": {"$ref": "#/$defs/gitCommit"}
+          }
+        },
+        "license": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["spdx", "url"],
+          "properties": {
+            "spdx": {"type": "string", "minLength": 2, "maxLength": 50},
+            "url": {"type": "string", "format": "uri", "pattern": "^https://"}
+          }
+        },
+        "platforms": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/platform"}
+        },
+        "hardware": {"$ref": "#/$defs/hardware"},
+        "release_qualification": {"$ref": "#/$defs/releaseQualification"},
+        "runtime": {"$ref": "#/$defs/runtime"},
+        "artifacts": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/artifact"}
+        },
+        "recipe": {"$ref": "#/$defs/recipe"},
+        "core_compatibility": {"$ref": "#/$defs/coreCompatibility"},
+        "capabilities_after_validation": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/capability"}
+        },
+        "canary": {"$ref": "#/$defs/canary"}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "active"}}},
+          "then": {
+            "properties": {
+              "recipe": {
+                "properties": {"onchain_root": {"type": "string"}}
+              },
+              "release_qualification": {
+                "properties": {"evidence": {"type": "object"}}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["os", "architectures", "accelerator"],
+      "properties": {
+        "os": {"enum": ["linux", "windows", "macos"]},
+        "architectures": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"enum": ["x86_64", "aarch64"]}
+        },
+        "accelerator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["vendor"],
+          "properties": {
+            "vendor": {"enum": ["nvidia", "amd", "apple", "intel"]},
+            "minimum_driver": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+){0,3}$"},
+            "recommended_driver": {"type": "string", "pattern": "^[0-9]+(\\.[0-9]+){0,3}$"}
+          }
+        }
+      }
+    },
+    "hardwareTier": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vram_mb", "ram_mb", "disk_free_mb"],
+      "properties": {
+        "vram_mb": {"type": "integer", "minimum": 1},
+        "ram_mb": {"type": "integer", "minimum": 1},
+        "disk_free_mb": {"type": "integer", "minimum": 1}
+      }
+    },
+    "hardware": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_tier", "recommended_tier", "minimum", "recommended"],
+      "properties": {
+        "minimum_tier": {"type": "string", "pattern": "^[a-z0-9._-]+$"},
+        "recommended_tier": {"type": "string", "pattern": "^[a-z0-9._-]+$"},
+        "minimum": {"$ref": "#/$defs/hardwareTier"},
+        "recommended": {"$ref": "#/$defs/hardwareTier"}
+      }
+    },
+    "releaseQualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy_version", "required_classes", "runs_per_class", "datacenter_min_vram_mb", "evidence"],
+      "properties": {
+        "policy_version": {"const": 1},
+        "required_classes": {"const": ["minimum", "midrange", "datacenter"]},
+        "runs_per_class": {"type": "integer", "minimum": 3, "maximum": 20},
+        "datacenter_min_vram_mb": {"type": "integer", "minimum": 32768},
+        "evidence": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["completed_at", "manifest_sha256"],
+              "properties": {
+                "completed_at": {"type": "string", "minLength": 20, "maxLength": 40},
+                "manifest_sha256": {"$ref": "#/$defs/sha256"}
+              }
+            }
+          ]
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "adapter", "model", "python", "cuda", "resource_policy",
+        "source_artifact", "lock_sha256", "digest"
+      ],
+      "properties": {
+        "adapter": {"const": "ace-step-1.5-api"},
+        "model": {"const": "acestep-v15-turbo"},
+        "python": {"const": "3.12.13"},
+        "cuda": {"const": "12.8"},
+        "resource_policy": {"const": "upstream-vram-auto-v1"},
+        "source_artifact": {"type": "string", "minLength": 1},
+        "lock_sha256": {"$ref": "#/$defs/sha256"},
+        "digest": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "artifactFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"$ref": "#/$defs/relativePath"},
+        "source": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "size": {"type": "integer", "minimum": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "kind", "source", "destination"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$"},
+        "kind": {"enum": ["git", "http", "tar_archive", "huggingface_snapshot"]},
+        "source": {"type": "string", "format": "uri", "pattern": "^https://"},
+        "destination": {"$ref": "#/$defs/relativePath"},
+        "revision": {"$ref": "#/$defs/gitCommit"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size": {"type": "integer", "minimum": 1},
+        "unpacked_size": {"type": "integer", "minimum": 1, "maximum": 5368709120},
+        "strip_components": {"type": "integer", "minimum": 0, "maximum": 4},
+        "files": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/artifactFile"}
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "git"}}},
+          "then": {"required": ["revision"]}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "http"}}},
+          "then": {"required": ["sha256", "size"]}
+        },
+        {
+          "if": {"properties": {"kind": {"const": "tar_archive"}}},
+          "then": {
+            "required": [
+              "revision", "sha256", "size", "unpacked_size", "strip_components"
+            ]
+          }
+        },
+        {
+          "if": {"properties": {"kind": {"const": "huggingface_snapshot"}}},
+          "then": {"required": ["revision", "files"]}
+        }
+      ]
+    },
+    "recipe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "format", "sha256", "onchain_root", "spec"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1, "maxLength": 128},
+        "format": {"const": "ace-step-api-template-v1"},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "onchain_root": {
+          "oneOf": [
+            {"type": "null"},
+            {"type": "string", "pattern": "^0x[a-fA-F0-9]{64}$"}
+          ]
+        },
+        "spec": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["adapter", "fixed", "limits", "variables"],
+          "properties": {
+            "adapter": {"const": "ace-step-api-audio-v1"},
+            "fixed": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["audio_format", "batch_size", "model", "sample_mode", "thinking", "use_cot_caption", "use_cot_language", "use_format", "use_random_seed"],
+              "properties": {
+                "audio_format": {"const": "wav"},
+                "batch_size": {"const": 1},
+                "model": {"const": "acestep-v15-turbo"},
+                "sample_mode": {"const": false},
+                "thinking": {"const": false},
+                "use_cot_caption": {"const": false},
+                "use_cot_language": {"const": false},
+                "use_format": {"const": false},
+                "use_random_seed": {"const": false}
+              }
+            },
+            "limits": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["audio_duration", "inference_steps", "lyrics_chars", "prompt_chars"],
+              "properties": {
+                "audio_duration": {"const": [10, 300]},
+                "inference_steps": {"const": [1, 20]},
+                "lyrics_chars": {"const": 20000},
+                "prompt_chars": {"const": 2000}
+              }
+            },
+            "variables": {
+              "const": ["prompt", "lyrics", "audio_duration", "inference_steps", "seed"]
+            }
+          }
+        }
+      }
+    },
+    "coreCompatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["worker_protocol", "minimum_protocol_version"],
+      "properties": {
+        "worker_protocol": {"const": "grid-worker-ws"},
+        "minimum_protocol_version": {"const": 1}
+      }
+    },
+    "capability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "job_types", "output_mime_types"],
+      "properties": {
+        "model": {"type": "string", "minLength": 1, "maxLength": 128},
+        "job_types": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"enum": ["audio"]}
+        },
+        "output_mime_types": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"enum": ["audio/wav", "audio/mpeg", "audio/flac"]}
+        }
+      }
+    },
+    "canary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter", "prompt", "seconds", "seed", "timeout_seconds", "expected_mime_type"],
+      "properties": {
+        "adapter": {"const": "ace-step-api-audio-v1"},
+        "prompt": {"type": "string", "minLength": 8, "maxLength": 500},
+        "seconds": {"type": "integer", "minimum": 5, "maximum": 30},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "timeout_seconds": {"type": "integer", "minimum": 30, "maximum": 1800},
+        "expected_mime_type": {"enum": ["audio/wav", "audio/mpeg", "audio/flac"]}
+      }
+    }
+  }
+}

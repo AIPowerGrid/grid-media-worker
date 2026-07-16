@@ -3,9 +3,15 @@ import json
 import logging
 import time
 import httpx
-import os
+import secrets
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlencode
+
+from .api_client import APIClient
+from .workflow import build_workflow
+from .utils import encode_media
+from .config import Settings
+from .model_mapper import initialize_model_mapper, get_horde_models
 
 
 def _view_url(info: Dict[str, Any]) -> str:
@@ -28,12 +34,6 @@ try:
     import websockets  # used for streaming preview frames from ComfyUI
 except ImportError:  # pragma: no cover — feature degrades to no-stream if missing
     websockets = None
-
-from .api_client import APIClient
-from .workflow import build_workflow
-from .utils import encode_media
-from .config import Settings
-from .model_mapper import initialize_model_mapper, get_horde_models
 
 logger = logging.getLogger(__name__)
 
@@ -61,14 +61,12 @@ class ComfyUIBridge:
         batch_size = payload.get("batch_size", 1)
         
         # Generate random seeds for each batch item if not provided
-        import random
-        base_seed = payload.get("seed", 0)
         provided_seeds = payload.get("seeds")
         if provided_seeds and len(provided_seeds) >= batch_size:
             seeds = provided_seeds[:batch_size]
         else:
             # Generate unique random seeds for each batch item
-            seeds = [random.randint(1, 2**32 - 1) for _ in range(batch_size)]
+            seeds = [secrets.randbelow(2**32 - 1) + 1 for _ in range(batch_size)]
             logger.info(f"Generated random seeds for batch: {seeds}")
         
         r2_uploads = job.get("r2_uploads", [])
@@ -90,7 +88,7 @@ class ComfyUIBridge:
         resp.raise_for_status()
         prompt_id = resp.json().get("prompt_id")
         if not prompt_id:
-            logger.error(f"No prompt_id for batch job")
+            logger.error("No prompt_id for batch job")
             return
 
         # Start streaming preview frames + progress events to the API in the

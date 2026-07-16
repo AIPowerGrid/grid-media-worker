@@ -39,4 +39,9 @@ bridge_log.txt
 
 # OS specific
 .DS_Store
-Thumbs.db .venv/
+Thumbs.db
+.venv/
+
+# Standalone-manager build output
+*.spec
+!grid-media-manager.spec

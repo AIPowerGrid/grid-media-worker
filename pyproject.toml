@@ -16,6 +16,9 @@ dependencies = [
   "uvicorn[standard]>=0.20.0",
   "jinja2>=3.1.0",
   "websockets>=11.0",
+  "cryptography>=42.0.0",
+  "jsonschema>=4.21.0",
+  "eth-account>=0.13.7,<0.14",
 ]
 
 [project.optional-dependencies]
@@ -25,13 +28,18 @@ test = [
   "respx",
   "Pillow",
 ]
+release = [
+  "pyinstaller==6.21.0",
+  "uv==0.11.28",
+]
 
 [project.scripts]
 comfy-bridge = "bridge.cli:main"
+grid-media-manager = "bridge.manager_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["bridge*"]
 
 [tool.setuptools.package-data]
-bridge = ["web/templates/**/*.html", "web/static/**/*", "certs/*.pem"]
+bridge = ["web/templates/**/*.html", "web/static/**/*", "certs/*.pem", "profiles/*.json"]

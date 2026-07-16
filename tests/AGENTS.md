@@ -9,6 +9,31 @@ functions, preview handling, and the current WebSocket worker.
 
 - `test_ws_worker.py` - WebSocket registration, dispatch, result, and failure
   behavior.
+- `test_worker_identity.py` - worker-key custody, payout-wallet delegation,
+  fresh registration proofs, and job-receipt signing.
+- `test_worker_profiles.py` - schema/signature fail-closed behavior and pinned
+  ACE-Step profile commitments.
+- `test_profile_release.py` - three-class benchmark qualification, offline
+  finalization, RecipeVault-root binding, private-key permissions, and
+  self-verifying Ed25519 output.
+- `test_hardware_profiles.py` - local detection, privacy-safe summaries, and
+  minimum/midrange/datacenter recommendation fixtures.
+- `test_profile_installer.py` - resumable artifact download, constrained source
+  archive extraction, commitment checks, and filesystem-containment behavior.
+- `test_profile_canary.py` - real ACE-Step API lifecycle parsing and WAV quality gates.
+- `test_profile_benchmark.py` - repeatable measurements, local resource sampling,
+  and removal of exact hardware from shareable evidence.
+- `test_audio_runtime.py` - local-only ACE-Step readiness, constrained job
+  requests, output validation, and same-origin download enforcement.
+- `test_runtime_process.py` - shell-free runtime launch specification,
+  checkpoint binding, loopback enforcement, and low-VRAM offload policy.
+- `test_manager_cli.py` - executable command parsing and local worker-key lifecycle.
+- `test_manager_web.py` - loopback manager session/origin controls, private
+  status projection, shell-free action commands, and log redaction.
+- `test_enrollment.py` - TLS URL policy, zero-copy Console pairing, private file
+  promotion, chain/audience binding, and ACK failure recovery without issuing a
+  second credential.
+- `test_profile_state.py` - digest/signature/canary authority required before advertisement.
 - `test_workflow.py` - ComfyUI workflow mutation and parameter mapping.
 - `test_api_client*.py` - legacy/client response and preview handling.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
