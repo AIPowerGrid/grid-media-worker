@@ -20,7 +20,8 @@ canary, wallet-pairing, and worker process state.
   mutating routes additionally require the exact loopback Origin and JSON.
 - `templates/manager_session_required.html` — safe recovery page for a missing
   local bootstrap session; API callers continue to receive a JSON 403.
-- `templates/` — Jinja2 pages (base, setup, dashboard, settings). `static/` — CSS.
+- `templates/` — Jinja2 pages (base, setup, dashboard, settings). `static/` — CSS,
+  manager JavaScript, and the canonical inference-worker logo/favicon assets.
 
 ## Local Contracts
 

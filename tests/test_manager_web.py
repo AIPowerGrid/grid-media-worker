@@ -85,6 +85,12 @@ def test_manager_requires_bootstrap_session_and_sets_security_headers(
     assert manager.SESSION_COOKIE in client.cookies
     assert "frame-ancestors 'none'" in response.headers["content-security-policy"]
     assert "cdn.jsdelivr.net" not in response.text
+    assert '/static/logo.png' in response.text
+    assert '/static/favicon-32x32.png' in response.text
+
+    logo = client.get("/static/logo.png")
+    assert logo.status_code == 200
+    assert logo.headers["content-type"] == "image/png"
 
 
 def test_manager_actions_require_exact_origin_and_json(tmp_path, monkeypatch):

@@ -42,17 +42,7 @@ button { font: inherit; }
 }
 
 .brand { display: flex; align-items: center; gap: 12px; }
-.brand-mark {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border: 1px solid #79480f;
-  border-radius: 7px;
-  color: #111;
-  background: var(--accent);
-  font-weight: 900;
-}
+.brand-logo { width: 40px; height: 40px; flex: 0 0 auto; object-fit: contain; }
 .brand div { display: flex; flex-direction: column; line-height: 1.15; }
 .brand strong { font-size: 14px; }
 .brand span:last-child { color: var(--muted); font-size: 12px; }
