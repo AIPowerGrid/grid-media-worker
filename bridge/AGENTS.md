@@ -65,6 +65,8 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   generic ComfyUI preflight.
 - Managed ACE-Step processes run with model-hub offline mode and may launch only
   after the pinned source and exact checkpoint tree revalidate locally.
+- Managed third-party runtimes run at warning log level so request prompts and
+  lyrics are not persisted in service journals.
 - A pending enrollment remains authoritative until Core activation is ACKed.
   Existing credential files must not short-circuit a pending ACK retry.
 

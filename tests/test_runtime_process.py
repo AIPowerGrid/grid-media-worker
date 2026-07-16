@@ -27,6 +27,7 @@ def _runtime_tree(tmp_path, profile):
 def test_runtime_spec_is_loopback_pinned_and_uses_verified_models(tmp_path, monkeypatch):
     monkeypatch.setenv("GRID_API_KEY", "must-not-reach-model-runtime")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "must-not-reach-model-runtime")
+    monkeypatch.setenv("LOGURU_LEVEL", "DEBUG")
     profile = _profile()
     root = _runtime_tree(tmp_path, profile)
     spec = build_runtime_process_spec(
@@ -47,6 +48,8 @@ def test_runtime_spec_is_loopback_pinned_and_uses_verified_models(tmp_path, monk
     assert spec.environment["HF_HUB_OFFLINE"] == "1"
     assert spec.environment["TRANSFORMERS_OFFLINE"] == "1"
     assert spec.environment["HF_HUB_DISABLE_TELEMETRY"] == "1"
+    assert spec.environment["LOGURU_LEVEL"] == "WARNING"
+    assert spec.environment["MPLCONFIGDIR"] == str(root / ".cache" / "matplotlib")
     assert profile["runtime"]["resource_policy"] == "upstream-vram-auto-v1"
     assert "ACESTEP_OFFLOAD_TO_CPU" not in spec.environment
     assert spec.environment["CUDA_VISIBLE_DEVICES"] == "GPU-test"

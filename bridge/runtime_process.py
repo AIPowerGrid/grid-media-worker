@@ -104,6 +104,10 @@ def build_runtime_process_spec(
             "ACESTEP_INIT_LLM": "false",
             "HF_HUB_DISABLE_TELEMETRY": "1",
             "HF_HUB_OFFLINE": "1",
+            # ACE-Step logs the fully formatted prompt and lyrics at INFO.
+            # Managed workers keep user content out of persistent service logs.
+            "LOGURU_LEVEL": "WARNING",
+            "MPLCONFIGDIR": str(root / ".cache" / "matplotlib"),
             "TRANSFORMERS_OFFLINE": "1",
         }
     )
