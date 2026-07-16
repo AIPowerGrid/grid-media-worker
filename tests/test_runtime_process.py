@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 
@@ -14,7 +15,9 @@ def _profile():
 
 def _runtime_tree(tmp_path, profile):
     root = tmp_path / "runtimes" / "ace-step-1.5"
-    entrypoint = root / ".venv" / "bin" / "acestep-api"
+    scripts = "Scripts" if os.name == "nt" else "bin"
+    suffix = ".exe" if os.name == "nt" else ""
+    entrypoint = root / ".venv" / scripts / f"acestep-api{suffix}"
     entrypoint.parent.mkdir(parents=True)
     entrypoint.write_text("#!/bin/sh\n", encoding="utf-8")
     (root / "checkpoints").mkdir()
@@ -34,7 +37,9 @@ def test_runtime_spec_is_loopback_pinned_and_uses_verified_models(tmp_path, monk
         capability_tier=profile["hardware"]["minimum_tier"],
         runtime_device="GPU-test",
     )
-    assert spec.command == (str(root / ".venv" / "bin" / "acestep-api"),)
+    scripts = "Scripts" if os.name == "nt" else "bin"
+    suffix = ".exe" if os.name == "nt" else ""
+    assert spec.command == (str(root / ".venv" / scripts / f"acestep-api{suffix}"),)
     assert spec.environment["ACESTEP_API_HOST"] == "127.0.0.1"
     assert spec.environment["ACESTEP_CONFIG_PATH"] == "acestep-v15-turbo"
     assert spec.environment["ACESTEP_CHECKPOINTS_DIR"] == str(root / "checkpoints")

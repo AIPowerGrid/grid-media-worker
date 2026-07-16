@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 from eth_account import Account
@@ -79,6 +80,7 @@ def test_job_receipt_uses_core_domain(tmp_path):
     assert recovered.lower() == generated["address"]
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows does not expose POSIX mode bits")
 def test_key_file_rejects_group_or_world_access(tmp_path):
     key_path = tmp_path / "worker-key.json"
     generate_worker_key(key_path)

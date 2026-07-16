@@ -3,6 +3,7 @@
 
 import hashlib
 import io
+import os
 import tarfile
 
 import httpx
@@ -335,12 +336,14 @@ async def test_runtime_setup_uses_frozen_uv_adapter(monkeypatch, tmp_path):
         ],
     }
     calls = []
+    scripts = "Scripts" if os.name == "nt" else "bin"
+    suffix = ".exe" if os.name == "nt" else ""
+    expected_entrypoint = runtime_root / ".venv" / scripts / f"acestep-api{suffix}"
 
     def fake_run(command, working_directory, environment):
         calls.append((command, working_directory, environment))
-        entrypoint = runtime_root / ".venv" / "bin" / "acestep-api"
-        entrypoint.parent.mkdir(parents=True)
-        entrypoint.write_text("", encoding="utf-8")
+        expected_entrypoint.parent.mkdir(parents=True)
+        expected_entrypoint.write_text("", encoding="utf-8")
 
     monkeypatch.setattr("bridge.profiles.installer._uv_executable", lambda: "/usr/bin/uv")
     monkeypatch.setattr("bridge.profiles.installer._run_process", fake_run)
@@ -348,7 +351,7 @@ async def test_runtime_setup_uses_frozen_uv_adapter(monkeypatch, tmp_path):
 
     entrypoint = await installer.setup_runtime(profile)
 
-    assert entrypoint == runtime_root / ".venv" / "bin" / "acestep-api"
+    assert entrypoint == expected_entrypoint
     assert len(calls) == 1
     command, working_directory, environment = calls[0]
     assert command == [
