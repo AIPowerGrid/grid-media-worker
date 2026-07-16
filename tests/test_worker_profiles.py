@@ -15,6 +15,7 @@ from bridge.profiles.profile import (
     bundled_profile_path,
     canonical_profile_bytes,
     calculate_runtime_digest,
+    load_bundled_trusted_keys,
     load_profile,
 )
 
@@ -69,6 +70,14 @@ def test_bundled_ace_step_profile_is_valid_draft():
 def test_unsigned_profile_fails_closed():
     with pytest.raises(ProfileSignatureError, match="unsigned"):
         load_profile(bundled_profile_path())
+
+
+def test_operator_pilot_verification_key_is_publicly_bundled():
+    keys = load_bundled_trusted_keys()
+
+    assert keys["aipg-operator-pilot-2026-01"] == (
+        "Ff2zYeMvDFjUZ23uA2vKqTYyFdUcaOQevBHADB9FXao="
+    )
 
 
 def test_active_profile_requires_release_evidence_and_recipe_root(tmp_path):
