@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -11,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from bridge.profiles.profile import bundled_profile_path, load_profile
 from bridge.profiles.qualification import QualificationError, qualify_reports
-from bridge.profiles.release import finalize_profile
+from bridge.profiles.release import finalize_profile, prepare_pilot_profile
 from bridge.profiles.state import profile_digest
 
 
@@ -33,15 +34,17 @@ def _private_key(tmp_path, password=None):
     return path
 
 
-def _qualification_reports(tmp_path):
-    profile = json.loads(bundled_profile_path().read_text(encoding="utf-8"))["profile"]
+def _qualification_reports(tmp_path, profile_path=None):
+    source = profile_path or bundled_profile_path()
+    profile = json.loads(Path(source).read_text(encoding="utf-8"))["profile"]
     specifications = {
         "minimum": (6144, "supported", profile["hardware"]["minimum_tier"]),
         "midrange": (24576, "recommended", profile["hardware"]["recommended_tier"]),
         "datacenter": (81920, "recommended", profile["hardware"]["recommended_tier"]),
     }
     reports = {}
-    for hardware_class, (vram_mb, status, capability_tier) in specifications.items():
+    for hardware_class in profile["release_qualification"]["required_classes"]:
+        vram_mb, status, capability_tier = specifications[hardware_class]
         device = f"GPU-{hardware_class}"
         results = [
             {
@@ -99,6 +102,40 @@ def _qualification_reports(tmp_path):
     return reports
 
 
+def test_private_pilot_uses_one_real_hardware_class_without_claiming_chain_provenance(
+    tmp_path,
+):
+    pilot = tmp_path / "pilot-draft.json"
+    prepared = prepare_pilot_profile(
+        bundled_profile_path(),
+        pilot,
+        hardware_class="midrange",
+    )
+    result = finalize_profile(
+        pilot,
+        tmp_path / "pilot-active.json",
+        _private_key(tmp_path),
+        key_id="operator-pilot-2026-01",
+        recipe_vault_root=None,
+        qualification_reports=_qualification_reports(tmp_path, pilot),
+    )
+    document = load_profile(
+        result["signed_profile"],
+        trusted_keys={result["key_id"]: result["public_key_base64"]},
+    )
+
+    assert prepared["hardware_class"] == "midrange"
+    assert document.profile["release_qualification"]["scope"] == "pilot"
+    assert document.profile["release_qualification"]["required_classes"] == ["midrange"]
+    assert document.profile["recipe"]["onchain_root"] is None
+    assert result["recipe_vault_root"] is None
+    manifest = json.loads(
+        (tmp_path / "pilot-active.json.qualification.json").read_text(encoding="utf-8")
+    )
+    assert manifest["scope"] == "pilot"
+    assert [item["class"] for item in manifest["reports"]] == ["midrange"]
+
+
 def test_release_finalizer_binds_registered_root_and_verifies_signature(tmp_path):
     draft = json.loads(bundled_profile_path().read_text(encoding="utf-8"))
     root = draft["profile"]["recipe"]["sha256"]
@@ -143,6 +180,18 @@ def test_release_finalizer_rejects_unregistered_or_wrong_root(tmp_path):
             _private_key(tmp_path),
             key_id="release",
             recipe_vault_root="00" * 32,
+            qualification_reports=_qualification_reports(tmp_path),
+        )
+
+
+def test_public_release_requires_recipe_vault_root(tmp_path):
+    with pytest.raises(ValueError, match="public release profiles require"):
+        finalize_profile(
+            bundled_profile_path(),
+            tmp_path / "profile.json",
+            _private_key(tmp_path),
+            key_id="release",
+            recipe_vault_root=None,
             qualification_reports=_qualification_reports(tmp_path),
         )
 

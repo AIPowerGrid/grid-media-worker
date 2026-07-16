@@ -131,6 +131,9 @@ async def _run(args: argparse.Namespace) -> None:
                     "qualification_policy_version": document.profile[
                         "release_qualification"
                     ]["policy_version"],
+                    "qualification_scope": document.profile["release_qualification"][
+                        "scope"
+                    ],
                     "qualification_required_classes": document.profile[
                         "release_qualification"
                     ]["required_classes"],

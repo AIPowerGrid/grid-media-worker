@@ -55,6 +55,7 @@ def test_bundled_ace_step_profile_is_valid_draft():
 
     assert document.profile["id"] == "ace-step-v1.5-turbo"
     assert document.profile["status"] == "draft"
+    assert document.profile["release_qualification"]["scope"] == "public"
     assert document.signature_verified is False
     assert document.profile["recipe"]["onchain_root"] is None
     assert document.profile["release_qualification"]["evidence"] is None
@@ -78,6 +79,26 @@ def test_active_profile_requires_release_evidence_and_recipe_root(tmp_path):
 
     with pytest.raises(ProfileValidationError, match="profile.(recipe|release_qualification)"):
         load_profile(path, allow_unsigned_draft=True)
+
+
+def test_active_pilot_requires_evidence_but_not_recipe_vault_claim(tmp_path):
+    envelope = _draft_envelope()
+    envelope["profile"]["status"] = "active"
+    envelope["profile"]["release_qualification"].update(
+        {
+            "scope": "pilot",
+            "required_classes": ["midrange"],
+            "evidence": {
+                "completed_at": "2026-07-16T12:00:00+00:00",
+                "manifest_sha256": "1" * 64,
+            },
+        }
+    )
+    path = tmp_path / "active-pilot.json"
+    path.write_text(json.dumps(envelope), encoding="utf-8")
+
+    with pytest.raises(ProfileSignatureError, match="unsigned"):
+        load_profile(path)
 
 
 def test_valid_ed25519_profile_is_accepted(tmp_path):

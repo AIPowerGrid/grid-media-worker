@@ -50,6 +50,7 @@
     },
     "release_qualification": {
       "policy_version": 1,
+      "scope": "public",
       "required_classes": ["minimum", "midrange", "datacenter"],
       "runs_per_class": 3,
       "datacenter_min_vram_mb": 80000,

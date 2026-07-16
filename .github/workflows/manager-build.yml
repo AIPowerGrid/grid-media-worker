@@ -86,7 +86,7 @@ jobs:
             echo "Tk payload unexpectedly present in the manager bundle" >&2
             exit 1
           fi
-          if grep -Eq 'bridge([./])profiles([./])(release|qualification)|profile_release' manager-archive.txt; then
+          if grep -Eq 'bridge([./])profiles([./])(release|qualification)|profile_(release|pilot)' manager-archive.txt; then
             echo "Offline release tooling unexpectedly present in the manager bundle" >&2
             exit 1
           fi
@@ -144,6 +144,10 @@ jobs:
           assert result["status"] == "active", "tagged release profile is not active"
           assert result["signature_verified"] is True, "tagged release profile is not signed"
           assert result["signing_key_id"], "tagged release has no signing key ID"
+          assert result["qualification_scope"] == "public", "pilot profiles cannot be published"
+          assert result["qualification_required_classes"] == [
+              "minimum", "midrange", "datacenter"
+          ], "public release is missing required hardware classes"
           assert result["recipe_onchain_root"], "tagged release has no RecipeVault root"
           assert result["qualification_manifest_sha256"], "tagged release is not hardware-qualified"
           PY

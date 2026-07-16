@@ -65,6 +65,7 @@ def qualify_reports(
     manifest = {
         "schema": "aipg-worker-qualification-v1",
         "policy_version": policy["policy_version"],
+        "scope": policy["scope"],
         "completed_at": datetime.now(timezone.utc).isoformat(),
         "draft_profile_digest": profile_digest(profile),
         "profile_id": profile["id"],

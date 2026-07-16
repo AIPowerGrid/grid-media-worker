@@ -29,7 +29,7 @@ def finalize_profile(
     private_key_path: str | Path,
     *,
     key_id: str,
-    recipe_vault_root: str,
+    recipe_vault_root: str | None,
     qualification_reports: Mapping[str, str | Path],
     force: bool = False,
     private_key_password: bytes | None = None,
@@ -41,8 +41,11 @@ def finalize_profile(
     document = load_profile(source, allow_unsigned_draft=True)
     if document.profile["status"] != "draft" or document.signature_verified:
         raise ValueError("release input must be an unsigned draft profile")
-    root = recipe_vault_root.removeprefix("0x").lower()
-    if root != document.profile["recipe"]["sha256"]:
+    scope = document.profile["release_qualification"]["scope"]
+    root = recipe_vault_root.removeprefix("0x").lower() if recipe_vault_root else None
+    if scope == "public" and root is None:
+        raise ValueError("public release profiles require a registered RecipeVault root")
+    if root is not None and root != document.profile["recipe"]["sha256"]:
         raise ValueError("RecipeVault root must equal the canonical recipe SHA-256")
     qualification_manifest, qualification_digest = qualify_reports(
         document.profile,
@@ -54,7 +57,7 @@ def finalize_profile(
     source_envelope = json.loads(document.source.read_text(encoding="utf-8"))
     profile = json.loads(json.dumps(document.profile))
     profile["status"] = "active"
-    onchain_root = "0x" + root
+    onchain_root = "0x" + root if root is not None else None
     profile["recipe"]["onchain_root"] = onchain_root
     profile["release_qualification"]["evidence"] = {
         "completed_at": qualification_manifest["completed_at"],
@@ -118,6 +121,52 @@ def finalize_profile(
         "qualification_manifest": str(manifest_target.resolve()),
         "qualification_manifest_sha256": qualification_digest,
         "signature_verified": verified.signature_verified,
+    }
+
+
+def prepare_pilot_profile(
+    source: str | Path,
+    destination: str | Path,
+    *,
+    hardware_class: str,
+    force: bool = False,
+) -> Mapping[str, Any]:
+    """Create an unsigned, exact-hardware pilot draft from the public profile."""
+
+    if hardware_class not in {"minimum", "midrange", "datacenter"}:
+        raise ValueError("pilot hardware class must be minimum, midrange, or datacenter")
+    document = load_profile(source, allow_unsigned_draft=True)
+    if document.profile["status"] != "draft" or document.signature_verified:
+        raise ValueError("pilot input must be an unsigned draft profile")
+    envelope = json.loads(document.source.read_text(encoding="utf-8"))
+    profile = envelope["profile"]
+    profile["release_qualification"]["scope"] = "pilot"
+    profile["release_qualification"]["required_classes"] = [hardware_class]
+    profile["release_qualification"]["evidence"] = None
+    profile["recipe"]["onchain_root"] = None
+    envelope["signature"] = None
+
+    target = Path(destination).expanduser()
+    if target.exists() and not force:
+        raise FileExistsError(f"refusing to overwrite pilot profile: {target}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".tmp")
+    try:
+        temporary.write_text(
+            json.dumps(envelope, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.chmod(temporary, 0o644)
+        verified = load_profile(temporary, allow_unsigned_draft=True)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return {
+        "pilot_profile": str(target.resolve()),
+        "hardware_class": hardware_class,
+        "profile_digest": profile_digest(verified.profile),
+        "runtime_digest": verified.profile["runtime"]["digest"],
+        "recipe_root": verified.profile["recipe"]["sha256"],
     }
 
 

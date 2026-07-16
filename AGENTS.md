@@ -53,9 +53,11 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   `workflow_git_export.py`, `check_connections.py`) are sample workflows, the model
   reference, and dev/release helpers — not part of the worker runtime.
 - `profile_release.py` is the offline-only final profile signer. It binds a
-  RecipeVault-registered root plus verified three-class qualification evidence
-  and accepts only a private `0600` Ed25519 PEM; it is never bundled into the
-  public manager executable.
+  reviewed qualification manifest and accepts only a private `0600` Ed25519
+  PEM; public profiles also require the RecipeVault root and three-class
+  evidence. `profile_pilot.py` derives a private, one-hardware-class pilot
+  draft that remains ineligible for public release. Neither tool is bundled
+  into the public manager executable.
 - `manager_entry.py` and `.github/workflows/manager-build.yml` build and smoke-test
   standalone manager executables. Tagged Linux/Windows builds require an active,
   signed, RecipeVault-bound profile before they can assemble a checksummed,

@@ -28,7 +28,10 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--profile", type=Path, required=True)
     parser.add_argument("--private-key", type=Path, required=True)
     parser.add_argument("--key-id", required=True)
-    parser.add_argument("--recipe-vault-root", required=True)
+    parser.add_argument(
+        "--recipe-vault-root",
+        help="required for public releases; optional provenance binding for private pilots",
+    )
     parser.add_argument(
         "--qualification",
         action="append",

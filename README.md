@@ -145,8 +145,53 @@ Use `CLASS=minimum`, `midrange`, or `datacenter` only for the matching release
 machine. The offline signer recomputes the class from the private report and
 rejects labels that do not match the selected GPU and profile recommendation.
 
-After benchmark approval and the hardware-wallet RecipeVault transaction, use
-the separate offline signer. It is intentionally not bundled into the manager:
+### Private operator pilot
+
+A Grid-operated pilot does not need to claim support for hardware that has not
+been tested. Derive a separate unsigned pilot draft, qualify it on the one exact
+machine, and sign only that profile. Core must allowlist its final digest. Pilot
+profiles are never accepted by the public `manager-v*` release workflow, and an
+omitted RecipeVault root is represented honestly as `null` rather than claimed
+without an on-chain registration.
+
+```bash
+python profile_pilot.py \
+  --profile bridge/profiles/ace-step-v1.profile.json \
+  --hardware-class midrange \
+  --out /offline/ace-step-midrange-pilot.draft.json
+
+grid-media-manager \
+  --profile /offline/ace-step-midrange-pilot.draft.json \
+  --allow-unsigned-draft install \
+  --install-root "$HOME/.aipg/media-worker" \
+  --state "$HOME/.aipg/media-worker/state-pilot.json" \
+  --gpu GPU-REPLACE-WITH-NVIDIA-UUID
+grid-media-manager \
+  --profile /offline/ace-step-midrange-pilot.draft.json \
+  --allow-unsigned-draft benchmark \
+  --install-root "$HOME/.aipg/media-worker" \
+  --state "$HOME/.aipg/media-worker/state-pilot.json" \
+  --runs 3 \
+  --out /offline/midrange-pilot-private.json
+
+python profile_release.py \
+  --profile /offline/ace-step-midrange-pilot.draft.json \
+  --private-key /offline/worker-profile-pilot.pem \
+  --ask-pass \
+  --key-id worker-profile-pilot-2026-01 \
+  --qualification midrange=/offline/midrange-pilot-private.json \
+  --out /offline/ace-step-midrange-pilot.active.json
+```
+
+The pilot remains fail-closed: it is signed, locally canary-validated, bound to
+the selected GPU and pinned runtime, identity-delegated, and accepted only when
+its exact profile digest is present in Core's operator-managed allowlist.
+
+### Public manager profile
+
+After all three hardware classes pass and the hardware-wallet RecipeVault
+transaction is confirmed, use the separate offline signer. It is intentionally
+not bundled into the manager:
 
 ```bash
 openssl genpkey -algorithm ED25519 -aes-256-cbc \

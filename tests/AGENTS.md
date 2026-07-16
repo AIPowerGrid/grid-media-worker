@@ -13,9 +13,9 @@ functions, preview handling, and the current WebSocket worker.
   fresh registration proofs, and job-receipt signing.
 - `test_worker_profiles.py` - schema/signature fail-closed behavior and pinned
   ACE-Step profile commitments.
-- `test_profile_release.py` - three-class benchmark qualification, offline
-  finalization, RecipeVault-root binding, private-key permissions, and
-  self-verifying Ed25519 output.
+- `test_profile_release.py` - one-class private pilot and three-class public
+  qualification, offline finalization, public RecipeVault-root binding,
+  private-key permissions, and self-verifying Ed25519 output.
 - `test_hardware_profiles.py` - local detection, privacy-safe summaries, and
   minimum/midrange/datacenter recommendation fixtures.
 - `test_profile_installer.py` - resumable artifact download, constrained source

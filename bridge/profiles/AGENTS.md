@@ -32,6 +32,10 @@ successful canary.
 
 ## Local Contracts
 
+- Qualification scope is explicit. `pilot` means one exact, privately operated
+  hardware class and may not be published by release CI. `public` requires the
+  minimum/midrange/datacenter matrix plus a RecipeVault provenance root.
+
 - Remote profiles are untrusted until both schema validation and signature
   verification pass. Draft/unsigned profiles are development-only and require
   an explicit caller override.

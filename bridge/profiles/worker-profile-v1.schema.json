@@ -92,11 +92,25 @@
           "if": {"properties": {"status": {"const": "active"}}},
           "then": {
             "properties": {
-              "recipe": {
-                "properties": {"onchain_root": {"type": "string"}}
-              },
               "release_qualification": {
                 "properties": {"evidence": {"type": "object"}}
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {"const": "active"},
+              "release_qualification": {
+                "properties": {"scope": {"const": "public"}}
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "recipe": {
+                "properties": {"onchain_root": {"type": "string"}}
               }
             }
           }
@@ -150,10 +164,17 @@
     "releaseQualification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["policy_version", "required_classes", "runs_per_class", "datacenter_min_vram_mb", "evidence"],
+      "required": ["policy_version", "scope", "required_classes", "runs_per_class", "datacenter_min_vram_mb", "evidence"],
       "properties": {
         "policy_version": {"const": 1},
-        "required_classes": {"const": ["minimum", "midrange", "datacenter"]},
+        "scope": {"enum": ["pilot", "public"]},
+        "required_classes": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {"enum": ["minimum", "midrange", "datacenter"]}
+        },
         "runs_per_class": {"type": "integer", "minimum": 3, "maximum": 20},
         "datacenter_min_vram_mb": {"type": "integer", "minimum": 32768},
         "evidence": {
@@ -170,7 +191,23 @@
             }
           ]
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"scope": {"const": "public"}}},
+          "then": {
+            "properties": {
+              "required_classes": {"const": ["minimum", "midrange", "datacenter"]}
+            }
+          }
+        },
+        {
+          "if": {"properties": {"scope": {"const": "pilot"}}},
+          "then": {
+            "properties": {"required_classes": {"minItems": 1, "maxItems": 1}}
+          }
+        }
+      ]
     },
     "runtime": {
       "type": "object",
