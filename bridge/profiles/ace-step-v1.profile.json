@@ -2,7 +2,7 @@
   "schema_version": "worker-profile-v1",
   "profile": {
     "id": "ace-step-v1.5-xl-turbo",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "status": "draft",
     "display_name": "ACE-Step 1.5 XL Turbo Audio Worker",
     "model": {
@@ -72,7 +72,7 @@
       "resource_policy": "upstream-vram-auto-v1",
       "source_artifact": "ace-step-runtime",
       "lock_sha256": "0a9c8067b3299bfc6881a06e097ff95e55e1b7bb8f9d1f84192ac23e59b995ab",
-      "digest": "cc907dcbe34a30ef4fa269ec09e0681361be920ec58fecfb5df5faa460487d38"
+      "digest": "695922bea28205c61b8c405e916c74d5edfb2be87df5b60c5a39c037eea86a83"
     },
     "artifacts": [
       {
@@ -185,7 +185,7 @@
           {
             "path": "model-00003-of-00004.safetensors",
             "size": 4986942808,
-            "sha256": "a4f6bd572eab79cf5f3f4678796f904c6d6c33680a3e6ed09034d6de7cabea4d"
+            "sha256": "a4f6bd572eab79cf5f3e4678796f904c6d6c33680a3e6ed09034d6de7cabea4d"
           },
           {
             "path": "model-00004-of-00004.safetensors",

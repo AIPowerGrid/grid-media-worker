@@ -167,6 +167,11 @@ def test_profile_pins_all_large_model_artifacts():
     assert not any(item["path"].startswith("acestep-5Hz-lm-") for item in shared["files"])
     assert not any(item["path"].startswith("acestep-v15-turbo/") for item in shared["files"])
     assert len(xl["files"]) == 9
+    assert next(
+        item["sha256"]
+        for item in xl["files"]
+        if item["path"] == "model-00003-of-00004.safetensors"
+    ) == "a4f6bd572eab79cf5f3e4678796f904c6d6c33680a3e6ed09034d6de7cabea4d"
     assert sum(item["size"] for item in xl["files"] if item["path"].endswith(".safetensors")) > 19_000_000_000
     assert all(len(item["sha256"]) == 64 for snapshot in snapshots for item in snapshot["files"])
 
