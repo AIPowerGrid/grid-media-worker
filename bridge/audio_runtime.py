@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Mapping
@@ -112,6 +113,30 @@ async def generate_ace_step_audio(
         "inference_steps": steps,
         "seed": seed,
     }
+    bpm = _optional_bounded_int(payload.get("bpm"), "bpm", limits["bpm"])
+    key_scale = _optional_pattern(
+        payload.get("key_scale"),
+        "key_scale",
+        limits["key_scale_pattern"],
+    )
+    time_signature = _optional_choice(
+        payload.get("time_signature"),
+        "time_signature",
+        limits["time_signatures"],
+    )
+    vocal_language = _optional_pattern(
+        payload.get("vocal_language"),
+        "vocal_language",
+        limits["vocal_language_pattern"],
+    )
+    for key, value in {
+        "bpm": bpm,
+        "key_scale": key_scale,
+        "time_signature": time_signature,
+        "vocal_language": vocal_language,
+    }.items():
+        if value is not None:
+            request[key] = value
     owns_client = client is None
     http = client or httpx.AsyncClient(timeout=60.0, headers=_headers(api_key))
     try:
@@ -238,3 +263,35 @@ def _bounded_number(value: Any, name: str, bounds) -> float:
     if not float(bounds[0]) <= result <= float(bounds[1]):
         raise AudioRuntimeError(f"{name} must be between {bounds[0]} and {bounds[1]}")
     return result
+
+
+def _optional_bounded_int(value: Any, name: str, bounds) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise AudioRuntimeError(f"{name} must be an integer")
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise AudioRuntimeError(f"{name} must be an integer") from exc
+    if str(result) != str(value).strip():
+        raise AudioRuntimeError(f"{name} must be an integer")
+    if not int(bounds[0]) <= result <= int(bounds[1]):
+        raise AudioRuntimeError(f"{name} must be between {bounds[0]} and {bounds[1]}")
+    return result
+
+
+def _optional_pattern(value: Any, name: str, pattern: str) -> str | None:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or not re.fullmatch(pattern, value):
+        raise AudioRuntimeError(f"{name} is invalid")
+    return value
+
+
+def _optional_choice(value: Any, name: str, choices) -> str | None:
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str) or value not in choices:
+        raise AudioRuntimeError(f"{name} is invalid")
+    return value

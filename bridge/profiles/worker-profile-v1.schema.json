@@ -320,16 +320,20 @@
             "limits": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["audio_duration", "inference_steps", "lyrics_chars", "prompt_chars"],
+              "required": ["audio_duration", "inference_steps", "bpm", "key_scale_pattern", "time_signatures", "vocal_language_pattern", "lyrics_chars", "prompt_chars"],
               "properties": {
                 "audio_duration": {"const": [10, 300]},
                 "inference_steps": {"const": [1, 20]},
+                "bpm": {"const": [30, 300]},
+                "key_scale_pattern": {"const": "^[A-G](?:#|b)? (?:Major|minor)$"},
+                "time_signatures": {"const": ["2", "3", "4", "6"]},
+                "vocal_language_pattern": {"const": "^[a-z]{2}$"},
                 "lyrics_chars": {"const": 20000},
                 "prompt_chars": {"const": 2000}
               }
             },
             "variables": {
-              "const": ["prompt", "lyrics", "audio_duration", "inference_steps", "seed"]
+              "const": ["prompt", "lyrics", "audio_duration", "inference_steps", "seed", "bpm", "key_scale", "time_signature", "vocal_language"]
             }
           }
         }

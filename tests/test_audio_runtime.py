@@ -45,10 +45,24 @@ def _recipe():
         "limits": {
             "audio_duration": [10, 300],
             "inference_steps": [1, 20],
+            "bpm": [30, 300],
+            "key_scale_pattern": "^[A-G](?:#|b)? (?:Major|minor)$",
+            "time_signatures": ["2", "3", "4", "6"],
+            "vocal_language_pattern": "^[a-z]{2}$",
             "lyrics_chars": 20000,
             "prompt_chars": 2000,
         },
-        "variables": ["prompt", "lyrics", "audio_duration", "inference_steps", "seed"],
+        "variables": [
+            "prompt",
+            "lyrics",
+            "audio_duration",
+            "inference_steps",
+            "seed",
+            "bpm",
+            "key_scale",
+            "time_signature",
+            "vocal_language",
+        ],
     }
 
 
@@ -96,7 +110,17 @@ async def test_generation_uses_only_the_constrained_local_recipe():
 
     result = await generate_ace_step_audio(
         "http://127.0.0.1:8001",
-        {"prompt": "clean electronic pulse", "lyrics": "", "seconds": 10, "inference_steps": 8, "seed": 42},
+        {
+            "prompt": "clean electronic pulse",
+            "lyrics": "",
+            "seconds": 10,
+            "inference_steps": 8,
+            "seed": 42,
+            "bpm": 96,
+            "key_scale": "A minor",
+            "time_signature": "4",
+            "vocal_language": "en",
+        },
         _recipe(),
         poll_interval=0,
     )
@@ -108,6 +132,10 @@ async def test_generation_uses_only_the_constrained_local_recipe():
     assert b'"use_cot_language":false' in sent
     assert b'"use_format":false' in sent
     assert b'"use_random_seed":false' in sent
+    assert b'"bpm":96' in sent
+    assert b'"key_scale":"A minor"' in sent
+    assert b'"time_signature":"4"' in sent
+    assert b'"vocal_language":"en"' in sent
     assert result.content == audio
     assert result.seconds == 10
 

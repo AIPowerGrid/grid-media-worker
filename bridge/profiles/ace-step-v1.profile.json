@@ -64,7 +64,7 @@
       "resource_policy": "upstream-vram-auto-v1",
       "source_artifact": "ace-step-runtime",
       "lock_sha256": "0a9c8067b3299bfc6881a06e097ff95e55e1b7bb8f9d1f84192ac23e59b995ab",
-      "digest": "7571cec88e676620b178a6aa03d8326da8381d65a7001d592a5238d8a1b50743"
+      "digest": "ea804d933dfda6fb36bb3c45d06f84da431b5de10763e7e8203283699772022b"
     },
     "artifacts": [
       {
@@ -233,7 +233,7 @@
     "recipe": {
       "id": "ace-step-v1.5-text2music",
       "format": "ace-step-api-template-v1",
-      "sha256": "21e6572ec04f315bea7089080797f55c7836da0707417b39f505f5ac5b54235f",
+      "sha256": "0f074238255c42e0304ef41373fe9e3c88b0e8e9584f39fae57c8fefb0e3ad5d",
       "onchain_root": null,
       "spec": {
         "adapter": "ace-step-api-audio-v1",
@@ -251,10 +251,24 @@
         "limits": {
           "audio_duration": [10, 300],
           "inference_steps": [1, 20],
+          "bpm": [30, 300],
+          "key_scale_pattern": "^[A-G](?:#|b)? (?:Major|minor)$",
+          "time_signatures": ["2", "3", "4", "6"],
+          "vocal_language_pattern": "^[a-z]{2}$",
           "lyrics_chars": 20000,
           "prompt_chars": 2000
         },
-        "variables": ["prompt", "lyrics", "audio_duration", "inference_steps", "seed"]
+        "variables": [
+          "prompt",
+          "lyrics",
+          "audio_duration",
+          "inference_steps",
+          "seed",
+          "bpm",
+          "key_scale",
+          "time_signature",
+          "vocal_language"
+        ]
       }
     },
     "core_compatibility": {
