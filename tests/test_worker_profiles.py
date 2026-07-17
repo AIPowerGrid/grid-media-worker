@@ -160,9 +160,11 @@ def test_profile_pins_all_large_model_artifacts():
     assert xl["source"].endswith("acestep-v15-xl-turbo")
     assert xl["destination"].endswith("/acestep-v15-xl-turbo")
     assert any(
-        item["path"] == "acestep-5Hz-lm-1.7B/model.safetensors"
+        item["path"] == "Qwen3-Embedding-0.6B/model.safetensors"
         for item in shared["files"]
     )
+    assert any(item["path"] == "vae/diffusion_pytorch_model.safetensors" for item in shared["files"])
+    assert not any(item["path"].startswith("acestep-5Hz-lm-") for item in shared["files"])
     assert not any(item["path"].startswith("acestep-v15-turbo/") for item in shared["files"])
     assert len(xl["files"]) == 9
     assert sum(item["size"] for item in xl["files"] if item["path"].endswith(".safetensors")) > 19_000_000_000
