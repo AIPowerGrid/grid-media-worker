@@ -2,7 +2,7 @@
   "schema_version": "worker-profile-v1",
   "profile": {
     "id": "ace-step-v1.5-xl-turbo",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "status": "draft",
     "display_name": "ACE-Step 1.5 XL Turbo Audio Worker",
     "model": {
@@ -72,7 +72,7 @@
       "resource_policy": "upstream-vram-auto-v1",
       "source_artifact": "ace-step-runtime",
       "lock_sha256": "0a9c8067b3299bfc6881a06e097ff95e55e1b7bb8f9d1f84192ac23e59b995ab",
-      "digest": "953b23dc2172f4d2d962b7da0d222a9afc0ea63c3c24822bb5c1eb2547f1174b"
+      "digest": "d626d89a2bc36b9ff37c4177a94dbf7c6ea32bb4b45080618f792fd93012c4db"
     },
     "artifacts": [
       {
@@ -151,9 +151,9 @@
           },
           {
             "path": "acestep-v15-xl-turbo/configuration_acestep_v15.py",
-            "source": "https://huggingface.co/ACE-Step/acestep-v15-xl-turbo/resolve/d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee/configuration_acestep_v15.py",
-            "size": 13225,
-            "sha256": "0d66f38eba6a3d1665c9449a1a52724d68354477bc88dcf02389640e3602a0c7"
+            "source": "https://raw.githubusercontent.com/ace-step/ACE-Step-1.5/dce621408bee8c31b4fcf4811682eb9359e1bc94/acestep/models/xl_turbo/configuration_acestep_v15.py",
+            "size": 212,
+            "sha256": "5f15aa79fe793bba3c00b6992dd193a269954950603d5031ecd7703b0fa69da1"
           },
           {
             "path": "acestep-v15-xl-turbo/model-00001-of-00004.safetensors",
@@ -187,9 +187,9 @@
           },
           {
             "path": "acestep-v15-xl-turbo/modeling_acestep_v15_xl_turbo.py",
-            "source": "https://huggingface.co/ACE-Step/acestep-v15-xl-turbo/resolve/d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee/modeling_acestep_v15_xl_turbo.py",
-            "size": 103821,
-            "sha256": "6576bd225807998ac169c5a05b86fb778091d5967666cbb417841836bd553ecc"
+            "source": "https://raw.githubusercontent.com/ace-step/ACE-Step-1.5/dce621408bee8c31b4fcf4811682eb9359e1bc94/acestep/models/xl_turbo/modeling_acestep_v15_xl_turbo.py",
+            "size": 109260,
+            "sha256": "e470a453e8a1b783750a76daece42e1939935c3d4d41c462358ffde4b70c4501"
           },
           {
             "path": "acestep-v15-xl-turbo/silence_latent.pt",

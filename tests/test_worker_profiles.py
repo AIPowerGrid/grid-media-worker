@@ -166,7 +166,22 @@ def test_profile_pins_all_large_model_artifacts():
     assert not any(item["path"].startswith("acestep-v15-turbo/") for item in shared["files"])
     xl_files = [item for item in shared["files"] if item["path"].startswith("acestep-v15-xl-turbo/")]
     assert len(xl_files) == 9
-    assert all(item["source"].startswith("https://huggingface.co/ACE-Step/acestep-v15-xl-turbo/resolve/d4a0b288") for item in xl_files)
+    runtime_code = {
+        item["path"]: item
+        for item in xl_files
+        if item["path"].endswith(".py")
+    }
+    assert runtime_code["acestep-v15-xl-turbo/configuration_acestep_v15.py"]["sha256"] == (
+        "5f15aa79fe793bba3c00b6992dd193a269954950603d5031ecd7703b0fa69da1"
+    )
+    assert runtime_code["acestep-v15-xl-turbo/modeling_acestep_v15_xl_turbo.py"]["sha256"] == (
+        "e470a453e8a1b783750a76daece42e1939935c3d4d41c462358ffde4b70c4501"
+    )
+    assert all(
+        item["source"].startswith("https://huggingface.co/ACE-Step/acestep-v15-xl-turbo/resolve/d4a0b288")
+        or item["source"].startswith("https://raw.githubusercontent.com/ace-step/ACE-Step-1.5/dce62140")
+        for item in xl_files
+    )
     assert next(
         item["sha256"]
         for item in xl_files
