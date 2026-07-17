@@ -38,8 +38,16 @@ def _qualification_reports(tmp_path, profile_path=None):
     source = profile_path or bundled_profile_path()
     profile = json.loads(Path(source).read_text(encoding="utf-8"))["profile"]
     specifications = {
-        "minimum": (6144, "supported", profile["hardware"]["minimum_tier"]),
-        "midrange": (24576, "recommended", profile["hardware"]["recommended_tier"]),
+        "minimum": (
+            profile["hardware"]["minimum"]["vram_mb"],
+            "supported",
+            profile["hardware"]["minimum_tier"],
+        ),
+        "midrange": (
+            profile["hardware"]["recommended"]["vram_mb"],
+            "recommended",
+            profile["hardware"]["recommended_tier"],
+        ),
         "datacenter": (81920, "recommended", profile["hardware"]["recommended_tier"]),
     }
     reports = {}

@@ -1,14 +1,14 @@
 {
   "schema_version": "worker-profile-v1",
   "profile": {
-    "id": "ace-step-v1.5-turbo",
-    "version": "0.1.0",
+    "id": "ace-step-v1.5-xl-turbo",
+    "version": "0.2.0",
     "status": "draft",
-    "display_name": "ACE-Step 1.5 Turbo Audio Worker",
+    "display_name": "ACE-Step 1.5 XL Turbo Audio Worker",
     "model": {
-      "id": "ace-step-v1.5-turbo",
-      "upstream": "https://huggingface.co/ACE-Step/Ace-Step1.5",
-      "revision": "19671f406d603126926c1b7e2adc169acbcade22"
+      "id": "ace-step-v1.5-xl-turbo",
+      "upstream": "https://huggingface.co/ACE-Step/acestep-v15-xl-turbo",
+      "revision": "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee"
     },
     "license": {
       "spdx": "MIT",
@@ -17,7 +17,9 @@
     "platforms": [
       {
         "os": "linux",
-        "architectures": ["x86_64"],
+        "architectures": [
+          "x86_64"
+        ],
         "accelerator": {
           "vendor": "nvidia",
           "minimum_driver": "570.26",
@@ -26,7 +28,9 @@
       },
       {
         "os": "windows",
-        "architectures": ["x86_64"],
+        "architectures": [
+          "x86_64"
+        ],
         "accelerator": {
           "vendor": "nvidia",
           "minimum_driver": "570.65",
@@ -38,48 +42,52 @@
       "minimum_tier": "audio.ace-step.base",
       "recommended_tier": "audio.ace-step.standard",
       "minimum": {
-        "vram_mb": 6144,
-        "ram_mb": 16384,
-        "disk_free_mb": 24576
-      },
-      "recommended": {
         "vram_mb": 12288,
         "ram_mb": 32768,
-        "disk_free_mb": 32768
+        "disk_free_mb": 49152
+      },
+      "recommended": {
+        "vram_mb": 20480,
+        "ram_mb": 65536,
+        "disk_free_mb": 65536
       }
     },
     "release_qualification": {
       "policy_version": 1,
       "scope": "public",
-      "required_classes": ["minimum", "midrange", "datacenter"],
+      "required_classes": [
+        "minimum",
+        "midrange",
+        "datacenter"
+      ],
       "runs_per_class": 3,
       "datacenter_min_vram_mb": 80000,
       "evidence": null
     },
     "runtime": {
       "adapter": "ace-step-1.5-api",
-      "model": "acestep-v15-turbo",
+      "model": "acestep-v15-xl-turbo",
       "python": "3.12.13",
       "cuda": "12.8",
       "resource_policy": "upstream-vram-auto-v1",
       "source_artifact": "ace-step-runtime",
       "lock_sha256": "0a9c8067b3299bfc6881a06e097ff95e55e1b7bb8f9d1f84192ac23e59b995ab",
-      "digest": "ea804d933dfda6fb36bb3c45d06f84da431b5de10763e7e8203283699772022b"
+      "digest": "dc041e131f6e82924e44f98006d8a4536fc672fa4fc014c407e1470269628ac2"
     },
     "artifacts": [
       {
         "id": "ace-step-runtime",
         "kind": "tar_archive",
-        "source": "https://codeload.github.com/ace-step/ACE-Step-1.5/tar.gz/6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0",
-        "revision": "6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0",
-        "sha256": "fc563d1e5c2f17733668692d2ff1a4507e44c903857b11e22108233fb3636b12",
-        "size": 8421774,
-        "unpacked_size": 19109821,
+        "source": "https://codeload.github.com/ace-step/ACE-Step-1.5/tar.gz/dce621408bee8c31b4fcf4811682eb9359e1bc94",
+        "revision": "dce621408bee8c31b4fcf4811682eb9359e1bc94",
+        "sha256": "66624bfbc375d06367d4bb62b0c3f55f07ad300228d774a2e2bd296b1bd1be7d",
+        "size": 8420297,
+        "unpacked_size": 19100223,
         "strip_components": 1,
         "destination": "runtimes/ace-step-1.5"
       },
       {
-        "id": "ace-step-model-snapshot",
+        "id": "ace-step-shared-checkpoints",
         "kind": "huggingface_snapshot",
         "source": "https://huggingface.co/ACE-Step/Ace-Step1.5",
         "revision": "19671f406d603126926c1b7e2adc169acbcade22",
@@ -181,43 +189,6 @@
             "sha256": "ca10d7e9fb3ed18575dd1e277a2579c16d108e32f27439684afa0e10b1440910"
           },
           {
-            "path": "README.md",
-            "size": 5496,
-            "sha256": "69d69b89e313706b93b420b13aa6232259b207a1cd19b0b70358d166e8e451a0"
-          },
-          {
-            "path": "acestep-v15-turbo/config.json",
-            "size": 1968,
-            "sha256": "74745ff704ea49164c3d2d1c99fc0670f3fc635a869f0aec2d1311e6a52d400a"
-          },
-          {
-            "path": "acestep-v15-turbo/configuration_acestep_v15.py",
-            "source": "https://raw.githubusercontent.com/ace-step/ACE-Step-1.5/6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0/acestep/models/turbo/configuration_acestep_v15.py",
-            "size": 212,
-            "sha256": "5f15aa79fe793bba3c00b6992dd193a269954950603d5031ecd7703b0fa69da1"
-          },
-          {
-            "path": "acestep-v15-turbo/model.safetensors",
-            "size": 4787825604,
-            "sha256": "3f6e0797fad420a39bd33979eb6e840e30989e34a3794e843d23b60ec6e422d7"
-          },
-          {
-            "path": "acestep-v15-turbo/modeling_acestep_v15_turbo.py",
-            "source": "https://raw.githubusercontent.com/ace-step/ACE-Step-1.5/6d467e4b5081ccb0abf1ec1bf4fdf9051a2d34b0/acestep/models/turbo/modeling_acestep_v15_turbo.py",
-            "size": 108712,
-            "sha256": "71b22e01b490bd9e149e4c0c5da2e1f512126f3ab3316e0ae97779af84d19512"
-          },
-          {
-            "path": "acestep-v15-turbo/silence_latent.pt",
-            "size": 3841215,
-            "sha256": "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b"
-          },
-          {
-            "path": "config.json",
-            "size": 1968,
-            "sha256": "74745ff704ea49164c3d2d1c99fc0670f3fc635a869f0aec2d1311e6a52d400a"
-          },
-          {
             "path": "vae/config.json",
             "size": 425,
             "sha256": "14e019904df567f26df750317a70e2bd08f9f8f3c40ff4a24c97d1cd3f20ccd2"
@@ -228,19 +199,73 @@
             "sha256": "da17edb604c40deaf09e9b24974e590d1ca83a374070e5d0884cfa4bed9a99b0"
           }
         ]
+      },
+      {
+        "id": "ace-step-xl-turbo-checkpoint",
+        "kind": "huggingface_snapshot",
+        "source": "https://huggingface.co/ACE-Step/acestep-v15-xl-turbo",
+        "revision": "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee",
+        "destination": "runtimes/ace-step-1.5/checkpoints/acestep-v15-xl-turbo",
+        "files": [
+          {
+            "path": "config.json",
+            "size": 2407,
+            "sha256": "e3665376d46477cbd3e76203cd4e241f11a6a6bb5f88464c49f3c6aae51a918b"
+          },
+          {
+            "path": "configuration_acestep_v15.py",
+            "size": 13225,
+            "sha256": "0d66f38eba6a3d1665c9449a1a52724d68354477bc88dcf02389640e3602a0c7"
+          },
+          {
+            "path": "model-00001-of-00004.safetensors",
+            "size": 4986971456,
+            "sha256": "e54a8413c981797312f53d512dec9944023d03f42f0740cbe86f62582cc27bdc"
+          },
+          {
+            "path": "model-00002-of-00004.safetensors",
+            "size": 4986942776,
+            "sha256": "b45f788b6dc9f15957cfa3d9b403f25f3f64c5211ecaf18dda45b67ea6470664"
+          },
+          {
+            "path": "model-00003-of-00004.safetensors",
+            "size": 4986942808,
+            "sha256": "a4f6bd572eab79cf5f3f4678796f904c6d6c33680a3e6ed09034d6de7cabea4d"
+          },
+          {
+            "path": "model-00004-of-00004.safetensors",
+            "size": 4988483464,
+            "sha256": "a868b05493c73808408f58b33a903371bb2846b53c8b19bd7476991bc8837259"
+          },
+          {
+            "path": "model.safetensors.index.json",
+            "size": 71471,
+            "sha256": "0a0c7e153a7bb6f6061b155739e9502cf83977bb959186d4df688595302a9474"
+          },
+          {
+            "path": "modeling_acestep_v15_xl_turbo.py",
+            "size": 103821,
+            "sha256": "6576bd225807998ac169c5a05b86fb778091d5967666cbb417841836bd553ecc"
+          },
+          {
+            "path": "silence_latent.pt",
+            "size": 3841215,
+            "sha256": "a778e9dd942f5e8b2c09c55370782d318834432b03dabbcdf70e6ed49ad6358b"
+          }
+        ]
       }
     ],
     "recipe": {
-      "id": "ace-step-v1.5-text2music",
+      "id": "ace-step-v1.5-xl-turbo-text2music",
       "format": "ace-step-api-template-v1",
-      "sha256": "0f074238255c42e0304ef41373fe9e3c88b0e8e9584f39fae57c8fefb0e3ad5d",
+      "sha256": "b1995dc3ef14ad1f439ced5d952de69e875b7d3af3ccaf5491c6ab5f43f550fb",
       "onchain_root": null,
       "spec": {
         "adapter": "ace-step-api-audio-v1",
         "fixed": {
           "audio_format": "wav",
           "batch_size": 1,
-          "model": "acestep-v15-turbo",
+          "model": "acestep-v15-xl-turbo",
           "sample_mode": false,
           "thinking": false,
           "use_cot_caption": false,
@@ -249,11 +274,25 @@
           "use_random_seed": false
         },
         "limits": {
-          "audio_duration": [10, 300],
-          "inference_steps": [1, 20],
-          "bpm": [30, 300],
+          "audio_duration": [
+            10,
+            300
+          ],
+          "inference_steps": [
+            1,
+            20
+          ],
+          "bpm": [
+            30,
+            300
+          ],
           "key_scale_pattern": "^[A-G](?:#|b)? (?:Major|minor)$",
-          "time_signatures": ["2", "3", "4", "6"],
+          "time_signatures": [
+            "2",
+            "3",
+            "4",
+            "6"
+          ],
           "vocal_language_pattern": "^[a-z]{2}$",
           "lyrics_chars": 20000,
           "prompt_chars": 2000
@@ -277,9 +316,14 @@
     },
     "capabilities_after_validation": [
       {
-        "model": "ace-step-v1.5-turbo",
-        "job_types": ["audio"],
-        "output_mime_types": ["audio/wav", "audio/flac"]
+        "model": "ace-step-v1.5-xl-turbo",
+        "job_types": [
+          "audio"
+        ],
+        "output_mime_types": [
+          "audio/wav",
+          "audio/flac"
+        ]
       }
     ],
     "canary": {

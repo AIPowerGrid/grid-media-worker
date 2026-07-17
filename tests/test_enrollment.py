@@ -99,7 +99,7 @@ async def test_console_pairing_installs_and_activates_private_credentials(
     pending = tmp_path / "pending.json"
     result = await connect_worker(
         grid_api_url="https://api.example",
-        profile_id="ace-step-v1.5-turbo",
+        profile_id="ace-step-v1.5-xl-turbo",
         worker_name="audio-rig-1",
         worker_key_path=key,
         delegation_path=delegation,
@@ -260,7 +260,7 @@ async def test_pairing_retries_activation_after_ack_failure(tmp_path, monkeypatc
     }
     kwargs = {
         "grid_api_url": "https://api.example",
-        "profile_id": "ace-step-v1.5-turbo",
+        "profile_id": "ace-step-v1.5-xl-turbo",
         "worker_name": "audio-rig-1",
         "chain_id": 8453,
         "audience": "api.example",
@@ -346,7 +346,7 @@ async def test_restart_rotates_local_worker_credentials(tmp_path, monkeypatch):
     }
     kwargs = {
         "grid_api_url": "https://api.example",
-        "profile_id": "ace-step-v1.5-turbo",
+        "profile_id": "ace-step-v1.5-xl-turbo",
         "worker_name": "audio-rig-1",
         "chain_id": 8453,
         "audience": "api.example",

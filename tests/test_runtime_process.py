@@ -42,7 +42,7 @@ def test_runtime_spec_is_loopback_pinned_and_uses_verified_models(tmp_path, monk
     suffix = ".exe" if os.name == "nt" else ""
     assert spec.command == (str(root / ".venv" / scripts / f"acestep-api{suffix}"),)
     assert spec.environment["ACESTEP_API_HOST"] == "127.0.0.1"
-    assert spec.environment["ACESTEP_CONFIG_PATH"] == "acestep-v15-turbo"
+    assert spec.environment["ACESTEP_CONFIG_PATH"] == "acestep-v15-xl-turbo"
     assert spec.environment["ACESTEP_CHECKPOINTS_DIR"] == str(root / "checkpoints")
     assert spec.environment["ACESTEP_INIT_LLM"] == "false"
     assert spec.environment["HF_HUB_OFFLINE"] == "1"

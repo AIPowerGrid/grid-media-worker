@@ -81,7 +81,7 @@ async def test_canary_generates_and_validates_audio():
     )
 
     request = json.loads(release.calls[0].request.content)
-    assert request["model"] == "acestep-v15-turbo"
+    assert request["model"] == "acestep-v15-xl-turbo"
     assert request["sample_mode"] is False
     assert request["thinking"] is False
     assert request["use_cot_caption"] is False

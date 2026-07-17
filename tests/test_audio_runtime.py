@@ -34,7 +34,7 @@ def _recipe():
         "fixed": {
             "audio_format": "wav",
             "batch_size": 1,
-            "model": "acestep-v15-turbo",
+            "model": "acestep-v15-xl-turbo",
             "sample_mode": False,
             "thinking": False,
             "use_cot_caption": False,
@@ -73,9 +73,9 @@ async def test_readiness_requires_the_pinned_runtime_model():
         return_value=httpx.Response(200, json={"data": {"status": "ok"}})
     )
     respx.get("http://127.0.0.1:8001/v1/model_inventory").mock(
-        return_value=httpx.Response(200, json={"data": {"models": [{"name": "acestep-v15-turbo"}]}})
+        return_value=httpx.Response(200, json={"data": {"models": [{"name": "acestep-v15-xl-turbo"}]}})
     )
-    await check_ace_step_runtime("http://127.0.0.1:8001", "acestep-v15-turbo")
+    await check_ace_step_runtime("http://127.0.0.1:8001", "acestep-v15-xl-turbo")
 
 
 @pytest.mark.asyncio
@@ -88,7 +88,7 @@ async def test_readiness_rejects_openai_model_list_shape_cleanly():
         return_value=httpx.Response(200, json={"object": "list", "data": []})
     )
     with pytest.raises(AudioRuntimeError, match="inventory response is malformed"):
-        await check_ace_step_runtime("http://127.0.0.1:8001", "acestep-v15-turbo")
+        await check_ace_step_runtime("http://127.0.0.1:8001", "acestep-v15-xl-turbo")
 
 
 @pytest.mark.asyncio
@@ -125,7 +125,7 @@ async def test_generation_uses_only_the_constrained_local_recipe():
         poll_interval=0,
     )
     sent = release.calls[0].request.content
-    assert b'"model":"acestep-v15-turbo"' in sent
+    assert b'"model":"acestep-v15-xl-turbo"' in sent
     assert b'"sample_mode":false' in sent
     assert b'"thinking":false' in sent
     assert b'"use_cot_caption":false' in sent

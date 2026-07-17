@@ -66,10 +66,10 @@ async def test_registration_payload_exposes_only_coarse_profile_metadata(tmp_pat
     monkeypatch.setattr(Settings, "GRID_WORKER_KEY_PATH", str(key_path))
     monkeypatch.setattr(Settings, "GRID_WORKER_DELEGATION_PATH", str(delegation_path))
     worker = WSWorker()
-    worker.models = ["ace-step-v1.5-turbo"]
+    worker.models = ["ace-step-v1.5-xl-turbo"]
     worker.job_types = ["audio"]
     worker.profile_metadata = {
-        "id": "ace-step-v1.5-turbo",
+        "id": "ace-step-v1.5-xl-turbo",
         "version": "0.1.0",
         "digest": "a" * 64,
         "signing_key_id": "release-key",
@@ -85,7 +85,7 @@ async def test_registration_payload_exposes_only_coarse_profile_metadata(tmp_pat
     finally:
         await worker.comfy.aclose()
 
-    assert payload["models"] == ["ace-step-v1.5-turbo"]
+    assert payload["models"] == ["ace-step-v1.5-xl-turbo"]
     assert payload["job_types"] == ["audio"]
     assert payload["worker_profile"]["capability_tier"] == "audio.ace-step.standard"
     assert payload["worker_identity"]["payload"]["profile_digest"] == "a" * 64

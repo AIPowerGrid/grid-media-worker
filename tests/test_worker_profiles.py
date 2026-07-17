@@ -54,7 +54,7 @@ def _signed_profile(tmp_path):
 def test_bundled_ace_step_profile_is_valid_draft():
     document = load_profile(bundled_profile_path(), allow_unsigned_draft=True)
 
-    assert document.profile["id"] == "ace-step-v1.5-turbo"
+    assert document.profile["id"] == "ace-step-v1.5-xl-turbo"
     assert document.profile["status"] == "draft"
     assert document.profile["release_qualification"]["scope"] == "public"
     assert document.signature_verified is False
@@ -148,20 +148,25 @@ def test_profile_rejects_path_traversal(tmp_path):
 
 def test_profile_pins_all_large_model_artifacts():
     document = load_profile(bundled_profile_path(), allow_unsigned_draft=True)
-    snapshot = next(
+    snapshots = [
         item
         for item in document.profile["artifacts"]
         if item["kind"] == "huggingface_snapshot"
-    )
+    ]
+    shared, xl = snapshots
 
-    assert len(snapshot["revision"]) == 40
-    assert len(snapshot["files"]) == 28
+    assert len(shared["revision"]) == 40
+    assert len(xl["revision"]) == 40
+    assert xl["source"].endswith("acestep-v15-xl-turbo")
+    assert xl["destination"].endswith("/acestep-v15-xl-turbo")
     assert any(
         item["path"] == "acestep-5Hz-lm-1.7B/model.safetensors"
-        for item in snapshot["files"]
+        for item in shared["files"]
     )
-    assert all(len(item["sha256"]) == 64 for item in snapshot["files"])
-    assert sum(item["size"] for item in snapshot["files"]) == 10_092_102_351
+    assert not any(item["path"].startswith("acestep-v15-turbo/") for item in shared["files"])
+    assert len(xl["files"]) == 9
+    assert sum(item["size"] for item in xl["files"] if item["path"].endswith(".safetensors")) > 19_000_000_000
+    assert all(len(item["sha256"]) == 64 for snapshot in snapshots for item in snapshot["files"])
 
 
 def test_profile_pins_self_contained_source_archive():

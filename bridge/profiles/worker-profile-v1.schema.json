@@ -218,7 +218,7 @@
       ],
       "properties": {
         "adapter": {"const": "ace-step-1.5-api"},
-        "model": {"const": "acestep-v15-turbo"},
+        "model": {"const": "acestep-v15-xl-turbo"},
         "python": {"const": "3.12.13"},
         "cuda": {"const": "12.8"},
         "resource_policy": {"const": "upstream-vram-auto-v1"},
@@ -308,7 +308,7 @@
               "properties": {
                 "audio_format": {"const": "wav"},
                 "batch_size": {"const": 1},
-                "model": {"const": "acestep-v15-turbo"},
+                "model": {"const": "acestep-v15-xl-turbo"},
                 "sample_mode": {"const": false},
                 "thinking": {"const": false},
                 "use_cot_caption": {"const": false},

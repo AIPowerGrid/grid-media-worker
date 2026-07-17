@@ -23,8 +23,8 @@ def profile():
 @pytest.mark.parametrize(
     ("label", "vram_mb", "ram_mb", "disk_mb", "driver", "expected"),
     [
-        ("minimum RTX class", 6144, 16384, 24576, "570.26", "supported"),
-        ("midrange RTX class", 12288, 32768, 32768, "570.86.15", "recommended"),
+        ("XL offload floor", 12288, 32768, 49152, "570.26", "supported"),
+        ("XL direct class", 20480, 65536, 65536, "570.86.15", "recommended"),
         ("datacenter class", 81920, 262144, 1048576, "575.57.08", "recommended"),
     ],
 )
@@ -69,9 +69,9 @@ def test_old_sixteen_gib_disk_floor_is_unsupported(profile):
     snapshot = HardwareSnapshot(
         "linux",
         "x86_64",
+        32768,
         16384,
-        16384,
-        (AcceleratorInfo("nvidia", "RTX", 6144, "570.26", "12.8"),),
+        (AcceleratorInfo("nvidia", "RTX", 12288, "570.26", "12.8"),),
     )
 
     result = evaluate_hardware(snapshot, profile)
