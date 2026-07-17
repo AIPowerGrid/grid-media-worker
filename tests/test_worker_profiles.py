@@ -153,12 +153,10 @@ def test_profile_pins_all_large_model_artifacts():
         for item in document.profile["artifacts"]
         if item["kind"] == "huggingface_snapshot"
     ]
-    shared, xl = snapshots
+    assert len(snapshots) == 1
+    shared = snapshots[0]
 
     assert len(shared["revision"]) == 40
-    assert len(xl["revision"]) == 40
-    assert xl["source"].endswith("acestep-v15-xl-turbo")
-    assert xl["destination"].endswith("/acestep-v15-xl-turbo")
     assert any(
         item["path"] == "Qwen3-Embedding-0.6B/model.safetensors"
         for item in shared["files"]
@@ -166,13 +164,15 @@ def test_profile_pins_all_large_model_artifacts():
     assert any(item["path"] == "vae/diffusion_pytorch_model.safetensors" for item in shared["files"])
     assert not any(item["path"].startswith("acestep-5Hz-lm-") for item in shared["files"])
     assert not any(item["path"].startswith("acestep-v15-turbo/") for item in shared["files"])
-    assert len(xl["files"]) == 9
+    xl_files = [item for item in shared["files"] if item["path"].startswith("acestep-v15-xl-turbo/")]
+    assert len(xl_files) == 9
+    assert all(item["source"].startswith("https://huggingface.co/ACE-Step/acestep-v15-xl-turbo/resolve/d4a0b288") for item in xl_files)
     assert next(
         item["sha256"]
-        for item in xl["files"]
-        if item["path"] == "model-00003-of-00004.safetensors"
+        for item in xl_files
+        if item["path"] == "acestep-v15-xl-turbo/model-00003-of-00004.safetensors"
     ) == "a4f6bd572eab79cf5f3e4678796f904c6d6c33680a3e6ed09034d6de7cabea4d"
-    assert sum(item["size"] for item in xl["files"] if item["path"].endswith(".safetensors")) > 19_000_000_000
+    assert sum(item["size"] for item in xl_files if item["path"].endswith(".safetensors")) > 19_000_000_000
     assert all(len(item["sha256"]) == 64 for snapshot in snapshots for item in snapshot["files"])
 
 
