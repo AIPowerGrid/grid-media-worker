@@ -78,6 +78,9 @@ def test_operator_pilot_verification_key_is_publicly_bundled():
     assert keys["aipg-operator-pilot-2026-01"] == (
         "Ff2zYeMvDFjUZ23uA2vKqTYyFdUcaOQevBHADB9FXao="
     )
+    assert keys["aipg-operator-pilot-2026-07"] == (
+        "046AacBdpkJSXe0JXx50y9aa7TqZLL8xWxJZG8AoZMs="
+    )
 
 
 def test_active_profile_requires_release_evidence_and_recipe_root(tmp_path):
