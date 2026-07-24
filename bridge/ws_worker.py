@@ -1,7 +1,6 @@
-"""Grid v2 WebSocket worker — the unified worker protocol.
+"""Grid WebSocket worker — the unified worker protocol.
 
-Replaces the legacy poll loop (/v2/generate/pop → submit) with a persistent
-WebSocket to the grid API:
+Uses one persistent WebSocket to the Grid API:
 
   register  {apikey, name, models[], job_types:["image","video"], bridge_agent}
   ← job     {id, job_type, model, payload, upload:[{put_url, key, content_type}]}
@@ -9,9 +8,8 @@ WebSocket to the grid API:
   → done    {id, results:[{index, seed, sha256}]}
   ← ack     {id, den}
 
-Outputs upload directly to R2 via the presigned PUT slots in the job message —
-this worker never holds storage credentials. Enable with GRID_WS=true until
-the v2 API is the default deployment, after which this becomes the default.
+Outputs upload directly to R2 via presigned PUT slots in the job message, so
+this worker never holds storage credentials.
 """
 
 import asyncio
@@ -23,7 +21,7 @@ import secrets
 import ssl
 import logging
 import time
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import httpx
 
@@ -32,9 +30,8 @@ try:
 except ImportError:  # pragma: no cover
     websockets = None
 
-from .bridge import _view_url
 from .config import Settings
-from .model_mapper import initialize_model_mapper, get_horde_models
+from .model_mapper import get_grid_models, initialize_model_mapper
 try:
     from .model_mapper import is_servable
 except ImportError:  # older worker forks lack the servability gate — advertise as-is
@@ -60,8 +57,18 @@ _MESH_EXTS = (".glb", ".gltf", ".ply", ".obj", ".stl", ".3mf")
 COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", "").strip()
 
 
+def _view_url(info: dict) -> str:
+    """Build a safe ComfyUI /view URL for an output entry."""
+    params = {"filename": info["filename"]}
+    if info.get("subfolder"):
+        params["subfolder"] = info["subfolder"]
+    if info.get("type"):
+        params["type"] = info["type"]
+    return f"/view?{urlencode(params)}"
+
+
 def grid_ws_url() -> str:
-    """Derive the worker WS URL from GRID_API_URL (handles legacy /api tails).
+    """Derive the worker WS URL from GRID_API_URL.
 
     Auto-maps an `api.*` host to `ws.*`: the public grid serves the persistent
     worker WebSocket on a DNS-only `ws.` host (bypasses Cloudflare, which resets
@@ -74,8 +81,6 @@ def grid_ws_url() -> str:
                 base = scheme + "ws." + base[len(scheme) + 4:]
                 break
     url = base.rstrip("/")
-    if url.endswith("/api"):
-        url = url[:-4]
     url = url.replace("https://", "wss://").replace("http://", "ws://")
     if url.startswith("ws://"):
         hostname = (urlsplit(url).hostname or "").lower()
@@ -158,12 +163,12 @@ class WSWorker:
 
     async def run(self):
         if websockets is None:
-            raise RuntimeError("websockets package required for GRID_WS mode")
+            raise RuntimeError("websockets package required for the Grid worker")
         # Advertise-only-what-you-can-serve gate. Applies to an explicit
         # GRID_MODEL override too — a worker must never advertise a model whose
         # workflow is missing or whose weights aren't loaded in ComfyUI (that's
         # what made this box advertise LTX-2.3 and 502 every job).
-        candidates = Settings.GRID_MODELS or get_horde_models()
+        candidates = Settings.GRID_MODELS or get_grid_models()
         if Settings.GRID_PROFILE_PATH:
             from .profiles.advertisement import load_profile_advertisement
             from .profiles.profile import load_profile

@@ -162,8 +162,8 @@ def apply_bridge_metadata(workflow: Dict[str, Any], job: Dict[str, Any]) -> bool
     if output_node_id and output_node_id in workflow:
         output_node = workflow[output_node_id]
         if "inputs" in output_node and "filename_prefix" in output_node["inputs"]:
-            output_node["inputs"]["filename_prefix"] = f"horde_{job_id}"
-            print(f"[_bridge] Set output filename prefix: horde_{job_id}")
+            output_node["inputs"]["filename_prefix"] = f"grid_{job_id}"
+            print(f"[_bridge] Set output filename prefix: grid_{job_id}")
     
     # Update batch_size in latent node if present
     latent_node_id = nodes.get("latent")
@@ -333,14 +333,14 @@ async def process_workflow(
             elif class_type == "SaveImage":
                 job_id = job.get("id", "unknown")
                 if isinstance(widgets, list) and len(widgets) >= 1:
-                    widgets[0] = f"horde_{job_id}"
+                    widgets[0] = f"grid_{job_id}"
                     node["widgets_values"] = widgets
                     
             # Handle save video nodes - update filename prefix for job tracking
             elif class_type == "SaveVideo":
                 job_id = job.get("id", "unknown")
                 if isinstance(widgets, list) and len(widgets) >= 1:
-                    widgets[0] = f"horde_{job_id}"
+                    widgets[0] = f"grid_{job_id}"
                     node["widgets_values"] = widgets
                     
             # Handle CreateVideo node - update fps if specified
@@ -511,13 +511,13 @@ async def process_workflow(
             elif class_type == "SaveImage":
                 if "filename_prefix" in inputs:
                     job_id = job.get("id", "unknown")
-                    inputs["filename_prefix"] = f"horde_{job_id}"
+                    inputs["filename_prefix"] = f"grid_{job_id}"
                     
             # Handle save video nodes - update filename prefix for job tracking
             elif class_type == "SaveVideo":
                 if "filename_prefix" in inputs:
                     job_id = job.get("id", "unknown")
-                    inputs["filename_prefix"] = f"horde_{job_id}"
+                    inputs["filename_prefix"] = f"grid_{job_id}"
                     
             # Handle CreateVideo node - update fps if specified
             elif class_type == "CreateVideo":

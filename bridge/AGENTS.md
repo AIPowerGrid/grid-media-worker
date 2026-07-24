@@ -7,15 +7,11 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 
 ## Ownership
 
-- **Transport (forward, the working path):** `ws_worker.py` — persistent WebSocket to
+- **Transport:** `ws_worker.py` — persistent WebSocket to
   `/v1/workers/ws` (derived from `GRID_API_URL`). Registers (`apikey`/`name`/`models`/`job_types`),
   receives `job` messages, renders, uploads each output to its presigned R2 slot, replies `done`
-  with seeds + sha256 receipts. Enable with `GRID_WS=true`.
-- **Transport (legacy, RETIRED server-side):** `bridge.py` (`ComfyUIBridge`) — poll loop
-  `/v2/generate/pop` → render → R2-or-base64 → `/v2/generate/submit`. The grid's `/v2` queue is
-  gone, so this path no longer functions; `api_client.py` is its HTTP client. `_view_url` (in
-  `bridge.py`) builds ComfyUI `/view` URLs (keep `subfolder`+`type` — WAN videos land in
-  subfolders) and is still reused by the WS path.
+  with seeds + SHA-256 receipts. `_view_url` preserves ComfyUI `subfolder` and
+  `type` values when retrieving outputs.
 - **Mapping:** `model_mapper.py` — grid model name → workflow filename (`DEFAULT_WORKFLOW_MAP`
   + img2img map), and checkpoint-file → grid-name resolution via the local model reference.
 - **Templating:** `workflow.py` — two paths. `build_recipe_workflow(job, payload)` executes a
@@ -43,14 +39,13 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 
 ## Local Contracts
 
-- Both transports share `build_workflow`, `model_mapper`, and `Settings` — keep payload
-  adaptation in the transport layer, not in `workflow.py`.
+- Keep transport payload adaptation in `ws_worker.py`, not `workflow.py`.
 - The worker never holds storage credentials (WS uploads to presigned slots; see root contract).
 - Worker credentials may cross only `wss://` outside loopback. Plaintext remote
   WebSockets require the explicit development-only `GRID_WS_INSECURE` override.
 - Progress/preview relay is best-effort and throttled; a dropped frame must never fail a job.
-- `cli.main` starts the FastAPI app; the worker runs as a background task inside its lifespan,
-  selected by `Settings.GRID_WS`. There is no separate worker-only entry point.
+- `cli.main` starts the FastAPI app; the WebSocket worker runs as a background
+  task inside its lifespan. There is no separate worker-only entry point.
 
 ## Work Guidance
 

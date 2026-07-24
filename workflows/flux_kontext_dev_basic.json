@@ -275,7 +275,7 @@
         "Node name for S&R": "LoadImageOutput"
       },
       "widgets_values": [
-        "horde_65b4ee64-998c-443d-a795-d0feabeff55b_00001_.png [output]",
+        "grid_65b4ee64-998c-443d-a795-d0feabeff55b_00001_.png [output]",
         false,
         "refresh",
         "image"
@@ -909,7 +909,7 @@
         "Node name for S&R": "LoadImageOutput"
       },
       "widgets_values": [
-        "horde_65b4ee64-998c-443d-a795-d0feabeff55b_00001_.png [output]",
+        "grid_65b4ee64-998c-443d-a795-d0feabeff55b_00001_.png [output]",
         false,
         "refresh",
         "image"

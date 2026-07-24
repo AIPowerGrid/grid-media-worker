@@ -2,8 +2,8 @@
 
 ## Purpose
 
-Pytest coverage for API compatibility helpers, workflow templating, utility
-functions, preview handling, and the current WebSocket worker.
+Pytest coverage for workflow templating, utility functions, preview handling,
+and the WebSocket worker.
 
 ## Ownership
 
@@ -35,15 +35,13 @@ functions, preview handling, and the current WebSocket worker.
   second credential.
 - `test_profile_state.py` - digest/signature/canary authority required before advertisement.
 - `test_workflow.py` - ComfyUI workflow mutation and parameter mapping.
-- `test_api_client*.py` - legacy/client response and preview handling.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
 
 ## Local Contracts
 
 - Tests must not contact production or use real Grid keys, R2 credentials,
   prompts, or payout wallets.
-- Keep WebSocket tests authoritative for the supported `/v1/workers/ws` path;
-  legacy poll-client tests do not make `/v2` supported again.
+- Keep WebSocket tests authoritative for the supported `/v1/workers/ws` path.
 - Use tiny synthetic fixtures and bound decoded/base64 data to avoid hiding
   memory-amplification failures.
 - Image comparison fixtures are not private validator golden outputs or proof
