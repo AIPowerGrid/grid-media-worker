@@ -11,8 +11,6 @@ live Grid yet.
 |---|---|---|
 | ComfyUI image/video/3D | Current | Operator-managed ComfyUI workflows |
 | ACE-Step 1.5 audio | Draft | Manager-installed, pinned local API runtime |
-| Legacy `/v2` polling | Retired | Do not use |
-
 Both current paths use `/v1/workers/ws` for push dispatch and upload outputs
 through short-lived, presigned URLs. Workers never receive Grid storage keys.
 
@@ -36,7 +34,6 @@ Set at least:
 GRID_API_KEY=your-grid-api-key
 GRID_WORKER_NAME=your-worker-name
 GRID_API_URL=https://api.aipowergrid.io
-GRID_WS=true
 COMFYUI_URL=http://127.0.0.1:8188
 ```
 

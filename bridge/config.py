@@ -26,9 +26,7 @@ class Settings:
     # nodes+files are present in ComfyUI, and SMOKE-RUN it. Advertise only what actually
     # runs E2E. Supersedes GRID_TRUST_MODELS (earned trust vs blind trust).
     GRID_PREFLIGHT = os.getenv("GRID_PREFLIGHT", "false").lower() in ("1", "true", "yes")
-    # Clean base (no /api) — the new prod nginx serves /v2 directly and the
-    # WS worker derives /v1/workers/ws from this. A legacy /api tail is
-    # tolerated and stripped where needed.
+    # Public API origin. The worker derives /v1/workers/ws from this.
     GRID_API_URL = os.getenv("GRID_API_URL", "https://api.aipowergrid.io")
     # WS endpoint: auto-derived api.*->ws.* (DNS-only host that bypasses
     # Cloudflare's WS resets). Override with GRID_STREAMING_URL. That endpoint
@@ -37,9 +35,6 @@ class Settings:
     GRID_STREAMING_URL = os.getenv("GRID_STREAMING_URL", "")
     GRID_WS_CA = os.getenv("GRID_WS_CA", "")
     GRID_WS_INSECURE = os.getenv("GRID_WS_INSECURE", "false").lower() in ("1", "true", "yes")
-    # v2 WebSocket worker protocol (push dispatch + presigned R2 uploads).
-    # Off by default until the v2 API is the production default deployment.
-    GRID_WS = os.getenv("GRID_WS", "false").lower() == "true"
     # Optional signed managed profile. When set, models/job types come only from
     # matching signed install state whose canary passed; GRID_MODEL/JOB_TYPES do
     # not override it. The profile path is intentionally opt-in while V1 is draft.

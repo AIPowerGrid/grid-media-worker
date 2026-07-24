@@ -51,9 +51,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 - `workflows/` — ComfyUI graph JSON templates the worker fills per job. Owned in its own AGENTS.md.
 - `tests/` — pytest suite (`respx` HTTP mocking, `pytest-asyncio`). Covers `api_client`,
   `workflow`, `utils`, preview.
-- Top-level loose files (`*.json`, `enhanced_reference.json`, `*.html`, `prepare_release.py`,
-  `workflow_git_export.py`, `check_connections.py`) are sample workflows, the model
-  reference, and dev/release helpers — not part of the worker runtime.
+- Top-level loose files (`*.json`, `prepare_release.py`,
+  `workflow_git_export.py`, `check_connections.py`) are sample workflows and
+  dev/release helpers, not part of the worker runtime.
 - `profile_release.py` is the offline-only final profile signer. It binds a
   reviewed qualification manifest and accepts only a private `0600` Ed25519
   PEM; public profiles also require the RecipeVault root and three-class
@@ -69,11 +69,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 
 - **Inherit org engineering standards:** aipg-documentation/engineering-standards/
   (core + git + the matching language file — Python).
-- **WebSocket is the working transport.** `bridge/ws_worker.py` opens a persistent WebSocket to
-  `/v1/workers/ws` (derived from `GRID_API_URL`) for push dispatch + presigned R2 PUT. The
-  legacy poll loop (`bridge/bridge.py`, `/v2/generate/pop` → `/submit`) targets the RETIRED `/v2`
-  queue and no longer functions server-side — do not treat it as a working default even though
-  `GRID_WS` still defaults `false` in config. All new work targets the WS path (`GRID_WS=true`).
+- **One transport:** `bridge/ws_worker.py` opens a persistent WebSocket to
+  `/v1/workers/ws` (derived from `GRID_API_URL`) for push dispatch and
+  presigned R2 uploads. The retired polling client is not shipped.
 - **Recipe-executor dispatch (primary):** the grid resolves a job's `recipe_spec` server-side
   and pushes the graph; `bridge/workflow.py:build_recipe_workflow` runs that core-resolved spec
   directly (binding only supplied source images into declared slots). This is the forward
@@ -82,8 +80,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 - **Advertise only what you can serve:** a model is advertised only when its workflow file is
   resolvable. With `WORKFLOW_FILE` set, models are derived from the checkpoint files in those
   graphs via the local model reference; unresolved files are not advertised.
-- **No standing storage creds on the worker.** WS path uploads outputs to grid-issued presigned
-  R2 URLs from the job message. The legacy path returns base64 if no R2 URL is present.
+- **No standing storage creds on the worker.** Outputs upload only to
+  Grid-issued presigned URLs from the job message.
 - **All config is env-driven** through `bridge/config.py` (`Settings`); the UI persists changes
   to `.env`. `GRID_API_KEY` is required.
 - **Worker profiles are fail-closed:** `bridge/profiles/` validates signed,

@@ -344,17 +344,17 @@ class ModelMapper:
                         )
 
     def get_workflow_file(
-        self, horde_model_name: str, source_processing: str = "txt2img"
+        self, grid_model_name: str, source_processing: str = "txt2img"
     ) -> str:
         """Get the workflow file for a Grid model. Use img2img workflow when source_processing is img2img."""
         if source_processing == "img2img":
             img2img_w = (
-                self.img2img_workflow_map.get(horde_model_name)
+                self.img2img_workflow_map.get(grid_model_name)
                 or next(
                     (
                         v
                         for k, v in self.img2img_workflow_map.items()
-                        if horde_model_name.lower() in k.lower()
+                        if grid_model_name.lower() in k.lower()
                     ),
                     None,
                 )
@@ -362,12 +362,12 @@ class ModelMapper:
             if img2img_w:
                 return img2img_w
         return (
-            self.workflow_map.get(horde_model_name)
+            self.workflow_map.get(grid_model_name)
             or next(
                 (
                     v
                     for k, v in self.workflow_map.items()
-                    if horde_model_name.lower() in k.lower()
+                    if grid_model_name.lower() in k.lower()
                 ),
                 None,
             )
@@ -426,7 +426,7 @@ class ModelMapper:
             return False, f"ComfyUI missing weights {sorted(missing)} (workflow {wf})"
         return True, "ok"
 
-    def get_available_horde_models(self) -> List[str]:
+    def get_available_grid_models(self) -> List[str]:
         """Only the mapped models we can actually serve right now."""
         servable = []
         for m in self.workflow_map.keys():
@@ -445,8 +445,8 @@ async def initialize_model_mapper(comfy_url: str):
     await model_mapper.initialize(comfy_url)
 
 
-def get_horde_models() -> List[str]:
-    return model_mapper.get_available_horde_models()
+def get_grid_models() -> List[str]:
+    return model_mapper.get_available_grid_models()
 
 
 def is_servable(model_name: str) -> tuple:
@@ -454,6 +454,6 @@ def is_servable(model_name: str) -> tuple:
 
 
 def get_workflow_file(
-    horde_model_name: str, source_processing: str = "txt2img"
+    grid_model_name: str, source_processing: str = "txt2img"
 ) -> str:
-    return model_mapper.get_workflow_file(horde_model_name, source_processing)
+    return model_mapper.get_workflow_file(grid_model_name, source_processing)
