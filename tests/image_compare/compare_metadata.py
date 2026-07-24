@@ -148,18 +148,18 @@ def compare_dicts(a: Dict[str, Any], b: Dict[str, Any]) -> Dict[str, Tuple[Any, 
 
 def main() -> None:
     base_dir = os.getcwd()
-    horde_files = sorted(glob(os.path.join(base_dir, "horde_*.png")))
+    grid_files = sorted(glob(os.path.join(base_dir, "grid_*.png")))
     comfy_files = sorted(glob(os.path.join(base_dir, "ComfyUI_*.png")))
-    if not horde_files or not comfy_files:
-        print("No files found. Put a horde_*.png and a ComfyUI_*.png in tests/image_compare/")
+    if not grid_files or not comfy_files:
+        print("No files found. Put a grid_*.png and a ComfyUI_*.png in tests/image_compare/")
         return
 
-    horde = horde_files[0]
+    grid = grid_files[0]
     comfy = comfy_files[0]
 
-    print(f"Comparing:\n- Bridge: {os.path.basename(horde)}\n- Native: {os.path.basename(comfy)}\n")
+    print(f"Comparing:\n- Bridge: {os.path.basename(grid)}\n- Native: {os.path.basename(comfy)}\n")
 
-    h_txt = read_png_text_chunks(horde)
+    h_txt = read_png_text_chunks(grid)
     c_txt = read_png_text_chunks(comfy)
 
     print(f"Text keys (bridge): {sorted(h_txt.keys())}")
@@ -193,5 +193,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
 

@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Local management surfaces for both worker paths. The legacy `comfy-bridge` app
-on port 7860 configures an existing ComfyUI worker. The standalone manager UI
+Local management surfaces for Grid workers. The `comfy-bridge` app on port 7860
+configures an existing ComfyUI worker. The standalone manager UI
 on loopback port 8791 presents signed-profile recommendation, installation,
 canary, wallet-pairing, and worker process state.
 
 ## Ownership
 
-- `app.py` — the FastAPI app, lifespan, and `worker_state` (running/error/task/bridge).
-  `_run_worker` selects WS vs legacy transport by `Settings.GRID_WS`; `start_worker`/`stop_worker`
-  manage the background task.
+- `app.py` — the FastAPI app, lifespan, and `worker_state`
+  (running/error/task/bridge). `_run_worker` runs the Grid WebSocket transport;
+  `start_worker`/`stop_worker` manage the background task.
 - `routes.py` — HTTP routes + JSON `/api/*` endpoints (setup detect/install/check/complete,
   status, settings save, worker restart) and the `setup_guard` redirect middleware. Reads/writes
   `.env` and mutates `Settings` in place.

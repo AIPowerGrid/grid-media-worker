@@ -25,8 +25,6 @@ def clean_test_files():
         "bridge_fix.py",
         "bridge_updated.py",
         "fix_workflow.py",
-        "horde_bridge.log",
-        "run_horde_worker.py",
         # Cache files
         "__pycache__",
         "*.pyc",
