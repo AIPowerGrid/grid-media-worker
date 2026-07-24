@@ -39,7 +39,9 @@ from .profiles.state import (
     write_install_state,
 )
 from .runtime_process import (
+    RuntimeProcessError,
     build_runtime_process_spec,
+    monitor_runtime_health,
     start_runtime,
     stop_runtime,
     wait_runtime_ready,
@@ -49,6 +51,46 @@ from .comfyui_detect import detect_comfyui
 DEFAULT_ROOT = Path.home() / ".aipg" / "media-worker"
 DEFAULT_CREDENTIALS = DEFAULT_ROOT / "worker-credentials.json"
 DEFAULT_ENROLLMENT = DEFAULT_ROOT / "worker-enrollment.json"
+
+
+async def _run_worker_with_runtime_supervision(
+    process,
+    *,
+    api_url: str,
+    runtime_model: str,
+    api_key: str,
+) -> None:
+    """Keep capability registration alive only while the local runtime is healthy."""
+    from .ws_worker import run_ws_worker
+
+    worker_task = asyncio.create_task(run_ws_worker(), name="grid-worker-websocket")
+    runtime_exit_task = asyncio.create_task(
+        process.wait(),
+        name="managed-runtime-exit",
+    )
+    health_task = asyncio.create_task(
+        monitor_runtime_health(
+            api_url=api_url,
+            runtime_model=runtime_model,
+            api_key=api_key,
+        ),
+        name="managed-runtime-health",
+    )
+    tasks = {worker_task, runtime_exit_task, health_task}
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        if runtime_exit_task in done:
+            raise RuntimeProcessError(
+                "ACE-Step runtime exited while its capability was registered "
+                f"(code {runtime_exit_task.result()})"
+            )
+        for task in done:
+            await task
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 class _ConsoleInstallProgress:
@@ -456,9 +498,12 @@ async def _run(args: argparse.Namespace) -> None:
             Settings.ACE_STEP_API_URL = args.ace_url
             Settings.ACE_STEP_API_KEY = api_key
             Settings.validate()
-            from .ws_worker import run_ws_worker
-
-            await run_ws_worker()
+            await _run_worker_with_runtime_supervision(
+                process,
+                api_url=args.ace_url,
+                runtime_model=document.profile["runtime"]["model"],
+                api_key=api_key,
+            )
         finally:
             await stop_runtime(process)
         return

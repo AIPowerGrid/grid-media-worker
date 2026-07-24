@@ -19,6 +19,11 @@ class RuntimeProcessError(RuntimeError):
     """The managed runtime could not be launched or did not become ready."""
 
 
+RUNTIME_HEALTH_CHECK_INTERVAL_SECONDS = 10.0
+RUNTIME_HEALTH_CHECK_TIMEOUT_SECONDS = 5.0
+RUNTIME_HEALTH_FAILURE_LIMIT = 6
+
+
 RUNTIME_ENV_ALLOWLIST = frozenset(
     {
         "APPDATA",
@@ -148,6 +153,40 @@ async def wait_runtime_ready(
             last_error = str(exc)
             await asyncio.sleep(2)
     raise RuntimeProcessError(f"ACE-Step runtime readiness timed out: {last_error}")
+
+
+async def monitor_runtime_health(
+    *,
+    api_url: str,
+    runtime_model: str,
+    api_key: str,
+    check_interval_seconds: float = RUNTIME_HEALTH_CHECK_INTERVAL_SECONDS,
+    check_timeout_seconds: float = RUNTIME_HEALTH_CHECK_TIMEOUT_SECONDS,
+    failure_limit: int = RUNTIME_HEALTH_FAILURE_LIMIT,
+) -> None:
+    """Fail after sustained runtime health loss while tolerating brief stalls."""
+    if failure_limit < 1:
+        raise ValueError("failure_limit must be positive")
+
+    failures = 0
+    last_error = "unknown"
+    while True:
+        try:
+            await asyncio.wait_for(
+                check_ace_step_runtime(api_url, runtime_model, api_key=api_key),
+                timeout=check_timeout_seconds,
+            )
+        except (AudioRuntimeError, OSError, asyncio.TimeoutError) as exc:
+            failures += 1
+            last_error = str(exc) or type(exc).__name__
+            if failures >= failure_limit:
+                raise RuntimeProcessError(
+                    "ACE-Step runtime failed "
+                    f"{failures} consecutive health checks: {last_error}"
+                ) from exc
+        else:
+            failures = 0
+        await asyncio.sleep(check_interval_seconds)
 
 
 async def stop_runtime(process) -> None:

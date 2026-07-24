@@ -65,6 +65,11 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   generic ComfyUI preflight.
 - Managed ACE-Step processes run with model-hub offline mode and may launch only
   after the pinned source and exact checkpoint tree revalidate locally.
+- Managed capabilities remain registered only while the supervised runtime
+  process is alive and its loopback health/model-inventory checks remain
+  healthy. Runtime exit cancels the worker WebSocket immediately; sustained
+  health loss also withdraws the capability so the service supervisor can
+  restart the complete runtime/worker pair.
 - Managed third-party runtimes run at warning log level so request prompts and
   lyrics are not persisted in service journals.
 - A pending enrollment remains authoritative until Core activation is ACKed.

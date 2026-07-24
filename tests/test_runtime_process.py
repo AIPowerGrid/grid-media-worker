@@ -5,8 +5,14 @@ import os
 
 import pytest
 
+from bridge.audio_runtime import AudioRuntimeError
 from bridge.profiles.profile import bundled_profile_path
-from bridge.runtime_process import RuntimeProcessError, build_runtime_process_spec
+from bridge import runtime_process
+from bridge.runtime_process import (
+    RuntimeProcessError,
+    build_runtime_process_spec,
+    monitor_runtime_health,
+)
 
 
 def _profile():
@@ -98,3 +104,32 @@ def test_runtime_spec_clears_unbound_inherited_gpu_selection(tmp_path, monkeypat
         capability_tier=profile["hardware"]["recommended_tier"],
     )
     assert "CUDA_VISIBLE_DEVICES" not in spec.environment
+
+
+@pytest.mark.asyncio
+async def test_runtime_health_requires_consecutive_failures(monkeypatch):
+    outcomes = [
+        AudioRuntimeError("brief startup stall"),
+        None,
+        AudioRuntimeError("runtime unavailable"),
+        AudioRuntimeError("runtime still unavailable"),
+    ]
+
+    async def check(*_args, **_kwargs):
+        outcome = outcomes.pop(0)
+        if outcome is not None:
+            raise outcome
+
+    monkeypatch.setattr(runtime_process, "check_ace_step_runtime", check)
+
+    with pytest.raises(RuntimeProcessError, match="2 consecutive health checks"):
+        await monitor_runtime_health(
+            api_url="http://127.0.0.1:8001",
+            runtime_model="acestep-v15-xl-turbo",
+            api_key="local-secret",
+            check_interval_seconds=0,
+            check_timeout_seconds=1,
+            failure_limit=2,
+        )
+
+    assert outcomes == []

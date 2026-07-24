@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import os
@@ -177,3 +178,35 @@ async def test_setup_orchestrates_install_canary_pair_and_clean_exit(
     connected.assert_awaited_once()
     assert connected.await_args.kwargs["worker_name"] == "audio-test-rig"
     stopped.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_runtime_exit_cancels_registered_worker(monkeypatch):
+    worker_cancelled = asyncio.Event()
+
+    async def run_worker():
+        try:
+            await asyncio.Future()
+        finally:
+            worker_cancelled.set()
+
+    async def monitor_health(**_kwargs):
+        await asyncio.Future()
+
+    class ExitedProcess:
+        async def wait(self):
+            await asyncio.sleep(0)
+            return 23
+
+    monkeypatch.setattr("bridge.ws_worker.run_ws_worker", run_worker)
+    monkeypatch.setattr(manager_cli, "monitor_runtime_health", monitor_health)
+
+    with pytest.raises(manager_cli.RuntimeProcessError, match="code 23"):
+        await manager_cli._run_worker_with_runtime_supervision(
+            ExitedProcess(),
+            api_url="http://127.0.0.1:8001",
+            runtime_model="acestep-v15-xl-turbo",
+            api_key="local-secret",
+        )
+
+    assert worker_cancelled.is_set()
