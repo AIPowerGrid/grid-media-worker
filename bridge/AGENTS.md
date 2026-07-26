@@ -65,6 +65,9 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   healthy. Runtime exit cancels the worker WebSocket immediately; sustained
   health loss also withdraws the capability so the service supervisor can
   restart the complete runtime/worker pair.
+- Every WebSocket worker, including legacy ComfyUI services outside the managed
+  profile supervisor, proves local runtime health before registration and
+  withdraws its Grid connection after sustained health-check failure.
 - Retired model identities are filtered before advertisement, including trusted
   overrides and signed profiles. A stale local reference must not resurrect a
   network capability that Core has retired.

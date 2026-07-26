@@ -1,4 +1,6 @@
 import pytest
+import respx
+from httpx import Response
 from eth_account import Account
 from eth_account.messages import encode_defunct
 
@@ -9,6 +11,7 @@ from bridge.identity import (
     generate_worker_key,
     install_delegation_certificate,
 )
+import bridge.ws_worker as ws_worker_module
 from bridge.ws_worker import WSWorker, grid_ws_url, media_result_hash, resolve_output_seeds
 
 
@@ -101,3 +104,35 @@ def test_media_result_hash_orders_outputs_by_index():
         {"index": 1, "sha256": "b" * 64},
     ]
     assert media_result_hash(list(reversed(ordered))) == media_result_hash(ordered)
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_comfy_health_check_requires_ready_http_runtime(monkeypatch):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+    respx.get("http://127.0.0.1:8188/system_stats").mock(
+        return_value=Response(503, text="starting")
+    )
+    worker = WSWorker()
+    try:
+        with pytest.raises(Exception):
+            await worker._check_runtime_health()
+    finally:
+        await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
+async def test_sustained_runtime_failure_withdraws_worker(monkeypatch):
+    monkeypatch.setattr(ws_worker_module, "RUNTIME_HEALTH_INTERVAL_S", 0)
+    monkeypatch.setattr(ws_worker_module, "RUNTIME_HEALTH_FAILURE_LIMIT", 2)
+    worker = WSWorker()
+
+    async def unhealthy():
+        raise RuntimeError("runtime down")
+
+    monkeypatch.setattr(worker, "_check_runtime_health", unhealthy)
+    try:
+        with pytest.raises(RuntimeError, match="withdrawing worker capability"):
+            await worker._monitor_runtime_health()
+    finally:
+        await worker.comfy.aclose()

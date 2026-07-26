@@ -7,8 +7,8 @@ and the WebSocket worker.
 
 ## Ownership
 
-- `test_ws_worker.py` - WebSocket registration, dispatch, result, and failure
-  behavior.
+- `test_ws_worker.py` - WebSocket registration, dispatch, result, failure
+  behavior, and runtime-health capability withdrawal.
 - `test_model_mapper.py` - model-reference resolution and retired-capability
   advertisement guards.
 - `test_worker_identity.py` - worker-key custody, payout-wallet delegation,

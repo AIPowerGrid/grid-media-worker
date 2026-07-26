@@ -43,6 +43,9 @@ logger = logging.getLogger(__name__)
 
 BRIDGE_AGENT = "comfy-bridge/ws:1"
 RECONNECT_DELAY_S = 5
+RUNTIME_HEALTH_INTERVAL_S = 10
+RUNTIME_HEALTH_FAILURE_LIMIT = 3
+RUNTIME_HEALTH_TIMEOUT_S = 5
 PROGRESS_INTERVAL = 2.0
 PREVIEW_INTERVAL = 1.5
 MAX_SEED = 2**53 - 1
@@ -160,6 +163,7 @@ class WSWorker:
         self.job_types: list[str] = list(Settings.GRID_JOB_TYPES)
         self.profile_metadata: dict | None = None
         self.profile: dict | None = None
+        self.direct_audio = False
 
     async def run(self):
         if websockets is None:
@@ -188,6 +192,7 @@ class WSWorker:
         direct_audio = bool(
             self.profile and self.profile["runtime"]["adapter"] == "ace-step-1.5-api"
         )
+        self.direct_audio = direct_audio
         if direct_audio:
             from .audio_runtime import check_ace_step_runtime
 
@@ -198,6 +203,7 @@ class WSWorker:
             )
         else:
             await initialize_model_mapper(Settings.COMFYUI_URL)
+            await self._check_runtime_health()
         self.models = []
         for m in candidates:
             if direct_audio:
@@ -243,17 +249,77 @@ class WSWorker:
                 raise RuntimeError(f"Registration rejected: {ready}")
             logger.info(f"Registered as worker {ready.get('worker_id')}")
 
-            while True:
-                msg = json.loads(await ws.recv())
-                mtype = msg.get("type")
-                if mtype == "ping":
-                    await ws.send(json.dumps({"type": "pong"}))
-                elif mtype == "job":
-                    await self._handle_job(ws, msg)
-                elif mtype == "ack":
-                    logger.info(f"Job {msg.get('id')} acked, den={msg.get('den')}")
-                elif mtype == "error":
-                    logger.error(f"Server error: {msg.get('message')}")
+            health_task = asyncio.create_task(self._monitor_runtime_health())
+            try:
+                while True:
+                    receive_task = asyncio.create_task(ws.recv())
+                    done, _pending = await asyncio.wait(
+                        {receive_task, health_task},
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                    if health_task in done:
+                        receive_task.cancel()
+                        try:
+                            await receive_task
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                        health_task.result()
+
+                    msg = json.loads(receive_task.result())
+                    mtype = msg.get("type")
+                    if mtype == "ping":
+                        await ws.send(json.dumps({"type": "pong"}))
+                    elif mtype == "job":
+                        await self._handle_job(ws, msg)
+                    elif mtype == "ack":
+                        logger.info(f"Job {msg.get('id')} acked, den={msg.get('den')}")
+                    elif mtype == "error":
+                        logger.error(f"Server error: {msg.get('message')}")
+            finally:
+                health_task.cancel()
+                try:
+                    await health_task
+                except (asyncio.CancelledError, Exception):
+                    pass
+
+    async def _check_runtime_health(self):
+        if self.direct_audio:
+            from .audio_runtime import check_ace_step_runtime
+
+            await check_ace_step_runtime(
+                Settings.ACE_STEP_API_URL,
+                self.profile["runtime"]["model"],
+                api_key=Settings.ACE_STEP_API_KEY,
+            )
+            return
+
+        response = await self.comfy.get(
+            "/system_stats",
+            timeout=RUNTIME_HEALTH_TIMEOUT_S,
+        )
+        response.raise_for_status()
+
+    async def _monitor_runtime_health(self):
+        failures = 0
+        while True:
+            await asyncio.sleep(RUNTIME_HEALTH_INTERVAL_S)
+            try:
+                await self._check_runtime_health()
+                failures = 0
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                failures += 1
+                logger.warning(
+                    "Runtime health check failed (%s/%s): %s",
+                    failures,
+                    RUNTIME_HEALTH_FAILURE_LIMIT,
+                    exc,
+                )
+                if failures >= RUNTIME_HEALTH_FAILURE_LIMIT:
+                    raise RuntimeError(
+                        "local generation runtime is unhealthy; withdrawing worker capability"
+                    ) from exc
 
     def registration_payload(self) -> dict:
         payload = {
