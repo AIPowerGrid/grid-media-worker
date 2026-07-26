@@ -65,6 +65,9 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   healthy. Runtime exit cancels the worker WebSocket immediately; sustained
   health loss also withdraws the capability so the service supervisor can
   restart the complete runtime/worker pair.
+- Retired model identities are filtered before advertisement, including trusted
+  overrides and signed profiles. A stale local reference must not resurrect a
+  network capability that Core has retired.
 - Managed third-party runtimes run at warning log level so request prompts and
   lyrics are not persisted in service journals.
 - A pending enrollment remains authoritative until Core activation is ACKed.

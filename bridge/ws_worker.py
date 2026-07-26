@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover
     websockets = None
 
 from .config import Settings
-from .model_mapper import get_grid_models, initialize_model_mapper
+from .model_mapper import get_grid_models, initialize_model_mapper, is_retired_model
 try:
     from .model_mapper import is_servable
 except ImportError:  # older worker forks lack the servability gate — advertise as-is
@@ -181,6 +181,10 @@ class WSWorker:
             self.job_types = list(advertisement.job_types)
             self.profile_metadata = dict(advertisement.metadata)
             self.profile = dict(load_profile(Settings.GRID_PROFILE_PATH).profile)
+        retired = [model for model in candidates if is_retired_model(model)]
+        if retired:
+            logger.warning("Refusing retired model claim(s): %s", retired)
+            candidates = [model for model in candidates if not is_retired_model(model)]
         direct_audio = bool(
             self.profile and self.profile["runtime"]["adapter"] == "ace-step-1.5-api"
         )

@@ -14,7 +14,7 @@ ComfyUI workflow graphs (JSON) the worker loads and fills per job. One file per 
 
 ## Ownership
 
-- One `.json` per supported pipeline (e.g. `turbovision.json`, `flux1_krea_dev.json`,
+- One `.json` per supported pipeline (e.g. `turbovision.json`,
   `flux2_klein_4b_api.json` + `..._image_edit.json`, `wan2_2_t2v_14b.json`, `sdxl.json`).
 - `README.md` — authoring notes (placeholders, dynamic fields, required node types).
 - Files may be in either ComfyUI native export (`nodes` array, `type` + `widgets_values`) or

@@ -7,6 +7,16 @@ from .config import Settings
 
 # File extensions that denote a model weight in a ComfyUI loader combo-box.
 MODEL_EXTS = (".safetensors", ".ckpt", ".gguf", ".pt", ".pth", ".bin", ".sft")
+RETIRED_GRID_MODEL_PREFIXES = ("flux.1-krea-dev", "flux1-krea-dev")
+
+
+def is_retired_model(model_name: str) -> bool:
+    if not isinstance(model_name, str):
+        return False
+    normalized = model_name.casefold().replace("_", "-").replace(" ", "-")
+    while "--" in normalized:
+        normalized = normalized.replace("--", "-")
+    return normalized.startswith(RETIRED_GRID_MODEL_PREFIXES)
 
 
 async def fetch_comfyui_model_files(comfy_url: str) -> set:
@@ -97,8 +107,6 @@ class ModelMapper:
         "playground_v2": "turbovision.json",
         "dreamshaper_8": "Dreamshaper.json",
         "stable_diffusion": "Dreamshaper.json",
-        "Flux.1-Krea-dev Uncensored (fp8+CLIP+VAE)": "flux1_krea_dev.json",
-        "flux.1-krea-dev": "flux1_krea_dev.json",
         "z-image-turbo": "image_z_image_turbo.json",
         "wan2.2_t2v": "wan2_2_t2v_14b.json",
         "wan2.2": "wan2_2_t2v_14b.json",
@@ -331,7 +339,12 @@ class ModelMapper:
                 grid_model_name: Optional[str] = self._resolve_file_to_grid_model(
                     model_file
                 )
-                if grid_model_name:
+                if grid_model_name and is_retired_model(grid_model_name):
+                    print(
+                        f"Info: model file '{model_file}' resolves to retired model "
+                        f"'{grid_model_name}'; not advertising"
+                    )
+                elif grid_model_name:
                     self.workflow_map[grid_model_name] = filename
                 else:
                     # Special handling for z-image-turbo which uses z_image_turbo_bf16.safetensors
