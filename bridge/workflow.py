@@ -31,16 +31,27 @@ async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) ->
     """Execute the core-resolved ComfyUI graph directly (dumb executor).
 
     The grid already injected prompt / seed / negative / numeric knobs into
-    `recipe_spec`. Here we only: bind a supplied source image to the recipe's
-    declared image slot(s), apply batch size, and run the graph as-is — NO
-    model_mapper, NO `_bridge` heuristics. This is the path that makes "approve a
-    recipe → it runs" actually work end-to-end."""
+    `recipe_spec`. Here we only bind a supplied source image, give output nodes
+    a job-unique filename, apply batch size, and run the graph as-is. There are
+    no model-mapper or `_bridge` heuristics on this path.
+    """
     workflow = copy.deepcopy(payload["recipe_spec"])
     # The spec IS the executable graph; defensively drop any metadata blocks.
     workflow.pop("_grid", None)
     workflow.pop("_bridge", None)
 
     job_id = job.get("id", "")
+
+    # ComfyUI may cache an otherwise identical SaveVideo/VHS output node and
+    # report a successful prompt with an empty `outputs` object. A job-unique
+    # prefix invalidates only the output node while preserving upstream cache
+    # reuse, and gives every artifact an unambiguous job association.
+    for node in workflow.values():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs")
+        if isinstance(inputs, dict) and "filename_prefix" in inputs:
+            inputs["filename_prefix"] = f"grid_{job_id}"
 
     # Source image (img2img / edit / i2v start frame): download → upload to ComfyUI
     # → point the recipe's declared image node(s) at the uploaded filename. The

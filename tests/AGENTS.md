@@ -37,6 +37,8 @@ and the WebSocket worker.
   second credential.
 - `test_profile_state.py` - digest/signature/canary authority required before advertisement.
 - `test_workflow.py` - ComfyUI workflow mutation and parameter mapping.
+- `test_recipe_workflow.py` - Core-resolved recipe output materialization and
+  cache-busting contracts.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
 
 ## Local Contracts

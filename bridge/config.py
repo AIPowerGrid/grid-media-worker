@@ -14,6 +14,13 @@ class Settings:
     GRID_MODELS = [m.strip() for m in _GRID_MODELS_RAW.split(",") if m.strip()]
     GRID_WORKER_NAME = os.getenv("GRID_WORKER_NAME", "ComfyUI-Bridge-Worker")
     COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
+    COMFYUI_JOB_TIMEOUT = int(os.getenv("GRID_COMFYUI_JOB_TIMEOUT", "720"))
+    # Optional escape hatch for isolated custom-node processes that ignore
+    # ComfyUI's /interrupt. Empty by default so unrelated processes are never
+    # killed unless the worker operator opts into a narrow command-line pattern.
+    COMFYUI_STUCK_PROCESS_PATTERN = os.getenv(
+        "GRID_COMFYUI_STUCK_PROCESS_PATTERN", ""
+    ).strip()
     # Modalities this worker advertises. Default image+video; a TRELLIS box sets
     # GRID_JOB_TYPES=3d (and GRID_MODEL=TRELLIS2). The grid routes by (model, job_type).
     _GRID_JOB_TYPES_RAW = os.getenv("GRID_JOB_TYPES", "image,video")

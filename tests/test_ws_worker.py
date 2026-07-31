@@ -136,3 +136,179 @@ async def test_sustained_runtime_failure_withdraws_worker(monkeypatch):
             await worker._monitor_runtime_health()
     finally:
         await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_collect_outputs_accepts_vhs_mp4_under_gifs(monkeypatch):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+    worker = WSWorker()
+    output = {
+        "filename": "grid_job-1_00001-audio.mp4",
+        "subfolder": "video",
+        "type": "output",
+    }
+    respx.get("http://127.0.0.1:8188/history/prompt-1").mock(
+        return_value=Response(
+            200,
+            json={
+                "prompt-1": {
+                    "status": {"status_str": "success", "completed": True},
+                    "outputs": {"140": {"gifs": [output]}},
+                }
+            },
+        )
+    )
+    respx.get(
+        "http://127.0.0.1:8188/view",
+        params={
+            "filename": output["filename"],
+            "subfolder": output["subfolder"],
+            "type": output["type"],
+        },
+    ).mock(return_value=Response(200, content=b"mp4-bytes"))
+
+    try:
+        items = await worker._collect_outputs("prompt-1", "video")
+    finally:
+        await worker.comfy.aclose()
+
+    assert items == [(b"mp4-bytes", "video", output["filename"])]
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_collect_outputs_waits_past_partial_unsupported_output(monkeypatch):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+
+    async def no_sleep(_seconds):
+        return None
+
+    monkeypatch.setattr(ws_worker_module.asyncio, "sleep", no_sleep)
+    worker = WSWorker()
+    output = {"filename": "grid_job-2.mp4", "type": "output"}
+    respx.get("http://127.0.0.1:8188/history/prompt-partial").mock(
+        side_effect=[
+            Response(
+                200,
+                json={
+                    "prompt-partial": {
+                        "status": {"status_str": "running", "completed": False},
+                        "outputs": {"log": {"text": ["still rendering"]}},
+                    }
+                },
+            ),
+            Response(
+                200,
+                json={
+                    "prompt-partial": {
+                        "status": {"status_str": "success", "completed": True},
+                        "outputs": {"140": {"gifs": [output]}},
+                    }
+                },
+            ),
+        ]
+    )
+    respx.get(
+        "http://127.0.0.1:8188/view",
+        params={"filename": output["filename"], "type": output["type"]},
+    ).mock(return_value=Response(200, content=b"video"))
+
+    try:
+        items = await worker._collect_outputs("prompt-partial", "video")
+    finally:
+        await worker.comfy.aclose()
+
+    assert items[0][0] == b"video"
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_collect_outputs_fails_fast_when_completed_without_output(monkeypatch):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+    worker = WSWorker()
+    respx.get("http://127.0.0.1:8188/history/prompt-2").mock(
+        return_value=Response(
+            200,
+            json={
+                "prompt-2": {
+                    "status": {"status_str": "success", "completed": True},
+                    "outputs": {},
+                }
+            },
+        )
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="completed but produced no supported"):
+            await worker._collect_outputs("prompt-2", "video")
+    finally:
+        await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_collect_outputs_surfaces_comfy_execution_error(monkeypatch):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+    worker = WSWorker()
+    respx.get("http://127.0.0.1:8188/history/prompt-3").mock(
+        return_value=Response(
+            200,
+            json={
+                "prompt-3": {
+                    "status": {
+                        "status_str": "error",
+                        "completed": False,
+                        "messages": [
+                            [
+                                "execution_error",
+                                {
+                                    "node_type": "SaveVideo",
+                                    "exception_type": "EncoderError",
+                                    "exception_message": "encoder failed\nprivate details",
+                                },
+                            ]
+                        ],
+                    },
+                    "outputs": {},
+                }
+            },
+        )
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="SaveVideo: EncoderError"):
+            await worker._collect_outputs("prompt-3", "video")
+    finally:
+        await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_collect_outputs_interrupts_at_deadline(monkeypatch):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+    monkeypatch.setattr(Settings, "COMFYUI_JOB_TIMEOUT", 0)
+    monkeypatch.setattr(Settings, "COMFYUI_STUCK_PROCESS_PATTERN", "")
+    worker = WSWorker()
+    respx.get("http://127.0.0.1:8188/history/prompt-4").mock(
+        return_value=Response(
+            200,
+            json={
+                "prompt-4": {
+                    "status": {"status_str": "running", "completed": False},
+                    "outputs": {},
+                }
+            },
+        )
+    )
+    interrupt = respx.post("http://127.0.0.1:8188/interrupt").mock(
+        return_value=Response(200)
+    )
+
+    try:
+        with pytest.raises(RuntimeError, match="interrupted ComfyUI"):
+            await worker._collect_outputs("prompt-4", "video")
+    finally:
+        await worker.comfy.aclose()
+
+    assert interrupt.called

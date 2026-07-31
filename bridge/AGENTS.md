@@ -11,7 +11,10 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   `/v1/workers/ws` (derived from `GRID_API_URL`). Registers (`apikey`/`name`/`models`/`job_types`),
   receives `job` messages, renders, uploads each output to its presigned R2 slot, replies `done`
   with seeds + SHA-256 receipts. `_view_url` preserves ComfyUI `subfolder` and
-  `type` values when retrieving outputs.
+  `type` values when retrieving outputs. Video collection accepts native
+  `videos`/`video` entries and Video Helper Suite's legacy `gifs` key, which may
+  contain MP4 output. A completed prompt without a supported output fails
+  immediately; a bounded timeout interrupts a genuinely stuck prompt.
 - **Mapping:** `model_mapper.py` — grid model name → workflow filename (`DEFAULT_WORKFLOW_MAP`
   + img2img map), and checkpoint-file → grid-name resolution via the local model reference.
 - **Templating:** `workflow.py` — two paths. `build_recipe_workflow(job, payload)` executes a

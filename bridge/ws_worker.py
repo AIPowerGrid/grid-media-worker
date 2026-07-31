@@ -60,6 +60,42 @@ _MESH_EXTS = (".glb", ".gltf", ".ply", ".obj", ".stl", ".3mf")
 COMFYUI_OUTPUT_DIR = os.getenv("COMFYUI_OUTPUT_DIR", "").strip()
 
 
+def _comfy_error_text(data: dict) -> str:
+    """Extract a bounded execution error from a ComfyUI history response."""
+    for entry in data.get("status", {}).get("messages", []):
+        if not isinstance(entry, (list, tuple)) or len(entry) != 2:
+            continue
+        if entry[0] != "execution_error" or not isinstance(entry[1], dict):
+            continue
+        info = entry[1]
+        node = info.get("node_type") or info.get("node_id") or "node"
+        # This string is relayed through Core to the user. Do not expose the
+        # raw exception message, which may contain host paths or model details.
+        error_type = str(info.get("exception_type") or "execution failed").strip()
+        return f"{node}: {error_type}"[:300]
+    return "unknown ComfyUI execution error"
+
+
+async def _reap_stuck_gpu_process() -> None:
+    """Best-effort reap of an explicitly configured stuck custom-node process."""
+    pattern = Settings.COMFYUI_STUCK_PROCESS_PATTERN
+    if not pattern:
+        return
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "pkill",
+            "-9",
+            "-f",
+            pattern,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        await proc.wait()
+        logger.warning("Reaped stuck GPU process matching configured pattern")
+    except Exception as exc:
+        logger.warning("Could not reap stuck GPU process: %s", exc)
+
+
 def _view_url(info: dict) -> str:
     """Build a safe ComfyUI /view URL for an output entry."""
     params = {"filename": info["filename"]}
@@ -455,19 +491,29 @@ class WSWorker:
     async def _collect_outputs(self, prompt_id: str, job_type: str = "image", started_at: float = 0.0):
         """Poll ComfyUI history until the prompt finishes; return its outputs.
 
-        Image/video outputs are registered in /history and fetched via /view. 3D
-        mesh outputs are NOT in /history (TRELLIS's export node only writes to disk),
-        so for job_type=3d we read the newest mesh file from COMFYUI_OUTPUT_DIR once
-        the prompt completes."""
+        Image/video outputs are registered in /history and fetched via /view.
+        Video Helper Suite historically labels MP4 output as `gifs`; that key
+        is part of the supported contract. 3D mesh outputs are read from disk.
+        """
         media_items = []
+        deadline = time.monotonic() + Settings.COMFYUI_JOB_TIMEOUT
         while True:
             hist = await self.comfy.get(f"/history/{prompt_id}")
             hist.raise_for_status()
             data = hist.json().get(prompt_id, {})
+            status = data.get("status", {})
             outputs = data.get("outputs", {})
             # image/video: registered in history
             for node_data in outputs.values():
-                for video_info in node_data.get("videos", []):
+                video_outputs = list(node_data.get("videos", []))
+                if job_type == "video":
+                    video_outputs.extend(node_data.get("gifs", []))
+                    singular = node_data.get("video")
+                    if isinstance(singular, dict):
+                        video_outputs.append(singular)
+                    elif isinstance(singular, list):
+                        video_outputs.extend(singular)
+                for video_info in video_outputs:
                     r = await self.comfy.get(_view_url(video_info))
                     r.raise_for_status()
                     media_items.append((r.content, "video", video_info["filename"]))
@@ -477,15 +523,35 @@ class WSWorker:
                     media_items.append((r.content, "image", img_info["filename"]))
             if media_items:
                 return media_items
-            # 3D: history carries no mesh; once the prompt is DONE, read from disk
-            status_done = bool(data.get("status", {}).get("completed")) or bool(outputs)
-            if job_type == "3d" and status_done:
+            if status.get("status_str") == "error":
+                raise RuntimeError(
+                    f"ComfyUI execution error: {_comfy_error_text(data)}"
+                )
+            # 3D: history carries no mesh; once the prompt is DONE, read from disk.
+            # Do not treat arbitrary partial outputs as terminal for other media:
+            # multi-output graphs may populate an unrelated node first.
+            completed = bool(status.get("completed"))
+            if job_type == "3d" and (completed or bool(outputs)):
                 mesh = self._read_newest_mesh(started_at)
                 if mesh:
                     return [mesh]
                 raise RuntimeError(
                     "3D job finished but no mesh found in COMFYUI_OUTPUT_DIR "
                     f"({COMFYUI_OUTPUT_DIR or 'unset!'})")
+            if completed:
+                raise RuntimeError(
+                    f"{job_type} job completed but produced no supported outputs"
+                )
+            if time.monotonic() >= deadline:
+                try:
+                    await self.comfy.post("/interrupt")
+                except Exception:
+                    logger.warning("ComfyUI interrupt failed", exc_info=True)
+                await _reap_stuck_gpu_process()
+                raise RuntimeError(
+                    f"Job exceeded {Settings.COMFYUI_JOB_TIMEOUT}s deadline; "
+                    "interrupted ComfyUI"
+                )
             await asyncio.sleep(1)
 
     def _read_newest_mesh(self, since_ts: float):
