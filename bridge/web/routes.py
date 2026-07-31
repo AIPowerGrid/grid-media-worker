@@ -38,10 +38,11 @@ async def setup_guard(request: Request, call_next):
 @app.get("/setup", response_class=HTMLResponse)
 async def setup_page(request: Request):
     detection = detect_comfyui()
-    return templates.TemplateResponse("setup.html", {
-        "request": request,
-        "detection": detection,
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="setup.html",
+        context={"detection": detection},
+    )
 
 
 @app.post("/api/setup/detect")
@@ -118,11 +119,14 @@ async def api_complete_setup(request: Request):
 # ---------------------------------------------------------------------------
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {
-        "request": request,
-        "worker_running": worker_state["running"],
-        "worker_error": worker_state.get("error"),
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="dashboard.html",
+        context={
+            "worker_running": worker_state["running"],
+            "worker_error": worker_state.get("error"),
+        },
+    )
 
 
 @app.get("/api/status")
@@ -147,20 +151,23 @@ async def api_status():
 # ---------------------------------------------------------------------------
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
-    return templates.TemplateResponse("settings.html", {
-        "request": request,
-        "settings": {
-            "GRID_API_KEY": Settings.GRID_API_KEY,
-            "GRID_WORKER_NAME": Settings.GRID_WORKER_NAME,
-            "COMFYUI_URL": Settings.COMFYUI_URL,
-            "GRID_MODEL": Settings._GRID_MODELS_RAW,
-            "WORKFLOW_FILE": Settings.WORKFLOW_FILE or "",
-            "GRID_NSFW": str(Settings.NSFW).lower(),
-            "GRID_THREADS": str(Settings.THREADS),
-            "GRID_MAX_PIXELS": str(Settings.MAX_PIXELS),
-            "GRID_BATCH_SIZE": str(Settings.BATCH_SIZE),
+    return templates.TemplateResponse(
+        request=request,
+        name="settings.html",
+        context={
+            "settings": {
+                "GRID_API_KEY": Settings.GRID_API_KEY,
+                "GRID_WORKER_NAME": Settings.GRID_WORKER_NAME,
+                "COMFYUI_URL": Settings.COMFYUI_URL,
+                "GRID_MODEL": Settings._GRID_MODELS_RAW,
+                "WORKFLOW_FILE": Settings.WORKFLOW_FILE or "",
+                "GRID_NSFW": str(Settings.NSFW).lower(),
+                "GRID_THREADS": str(Settings.THREADS),
+                "GRID_MAX_PIXELS": str(Settings.MAX_PIXELS),
+                "GRID_BATCH_SIZE": str(Settings.BATCH_SIZE),
+            },
         },
-    })
+    )
 
 
 @app.post("/api/settings")
