@@ -10,7 +10,8 @@ canary, wallet-pairing, and worker process state.
 ## Ownership
 
 - `app.py` — the FastAPI app, lifespan, and `worker_state`
-  (running/error/task/bridge). `_run_worker` runs the Grid WebSocket transport;
+  (running/error/task/bridge). `_run_worker` supervises the Grid WebSocket transport and retries
+  the full startup sequence after local-runtime/preflight failures;
   `start_worker`/`stop_worker` manage the background task.
 - `routes.py` — HTTP routes + JSON `/api/*` endpoints (setup detect/install/check/complete,
   status, settings save, worker restart) and the `setup_guard` redirect middleware. Reads/writes

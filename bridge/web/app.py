@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from ..config import Settings
 
 logger = logging.getLogger(__name__)
+WORKER_START_RETRY_SECONDS = 5
 
 WEB_DIR = Path(__file__).parent
 TEMPLATES_DIR = WEB_DIR / "templates"
@@ -31,23 +32,36 @@ def _is_configured() -> bool:
 
 
 async def _run_worker():
-    """Run the Grid WebSocket worker as a background task."""
+    """Supervise the Grid worker, including failures before WS registration."""
     from ..ws_worker import WSWorker
 
-    worker = WSWorker()
-    worker_state["bridge"] = worker
-    worker_state["running"] = True
-    worker_state["error"] = None
     try:
-        await worker.run()
-    except asyncio.CancelledError:
-        logger.info("Worker task cancelled.")
-    except Exception as e:
-        logger.error(f"Worker error: {e}")
-        worker_state["error"] = str(e)
+        while True:
+            worker = WSWorker()
+            worker_state["bridge"] = worker
+            worker_state["running"] = True
+            worker_state["error"] = None
+            try:
+                await worker.run()
+                raise RuntimeError("worker exited unexpectedly")
+            except asyncio.CancelledError:
+                logger.info("Worker task cancelled.")
+                raise
+            except Exception as exc:
+                logger.error(
+                    "Worker startup failed: %s; retrying in %ss",
+                    exc,
+                    WORKER_START_RETRY_SECONDS,
+                )
+                worker_state["running"] = False
+                worker_state["error"] = str(exc)
+            finally:
+                await worker.comfy.aclose()
+
+            await asyncio.sleep(WORKER_START_RETRY_SECONDS)
     finally:
         worker_state["running"] = False
-        await worker.comfy.aclose()
+        worker_state["bridge"] = None
 
 
 async def start_worker():
