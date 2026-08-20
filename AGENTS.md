@@ -64,6 +64,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   standalone manager executables. Tagged Linux/Windows builds require an active,
   signed, RecipeVault-bound profile before they can assemble a checksummed,
   provenance-attested draft GitHub Release; CI never publishes that draft.
+- `.github/workflows/secret-scan.yml` and `.gitleaks.toml` enforce
+  checksum-verified secret and operational-infrastructure scanning.
 
 ## Local Contracts
 
@@ -104,6 +106,7 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 ## Verification
 
 - `pytest tests/` — CI runs it on Python 3.10–3.12 (`.github/workflows/test.yml`).
+- `gitleaks detect --source . --no-git --config .gitleaks.toml --redact`
 - Release packaging: install `.[release]`, build `grid-media-manager.spec`, then
   run `--help`, unsigned-draft inspection, and temporary worker-key generation
   against the resulting executable. The spec embeds pinned `uv`; build outputs
