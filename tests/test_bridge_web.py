@@ -140,7 +140,7 @@ def test_comfy_installer_uses_only_server_discovered_executable(monkeypatch):
         "install",
         "--skip-prompt",
         "--path",
-        "/safe/ComfyUI",
+        str(comfyui_detect.Path("/safe/ComfyUI")),
     ]]
 
 
