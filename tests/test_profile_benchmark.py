@@ -71,6 +71,7 @@ async def test_benchmark_splits_private_hardware_from_shareable_evidence(monkeyp
     assert "hardware" not in public
     assert public["recipe_root"] == _profile()["recipe"]["sha256"]
     assert public["recipe_vault_root"] is None
+    assert public["qualification_class"] == "midrange"
     assert public["metrics"]["elapsed_seconds"]["median"] == 9.0
     assert public["metrics"]["audio_seconds_per_wall_second_median"] == 1.1111
     assert public["metrics"]["peak_gpu_used_mb"] == 11000
@@ -87,6 +88,26 @@ async def test_benchmark_rejects_bad_run_count():
     with pytest.raises(ValueError, match="between 1 and 20"):
         await run_profile_benchmark(
             _profile(), snapshot, recommendation, never, runs=0,
+        )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_rejects_unclassifiable_hardware(monkeypatch):
+    snapshot = HardwareSnapshot("linux", "x86_64", 65536, 131072, ())
+    recommendation = Recommendation("recommended", "tier", None, ("ok",))
+
+    async def run_once():
+        return CanaryResult(8.0, 1024, "a" * 64, 10.0, 48000, 2)
+
+    monkeypatch.setattr(
+        benchmark,
+        "_resource_sample",
+        lambda _device: {"gpu_used_mb": 1000, "host_ram_used_mb": 2000},
+    )
+
+    with pytest.raises(ValueError, match="qualification class"):
+        await run_profile_benchmark(
+            _profile(), snapshot, recommendation, run_once, runs=1,
         )
 
 

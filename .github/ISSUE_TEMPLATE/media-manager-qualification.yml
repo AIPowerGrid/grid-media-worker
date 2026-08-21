@@ -1,0 +1,52 @@
+name: Media manager qualification
+description: Volunteer a privacy-safe ACE-Step hardware qualification report.
+title: "qualification: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read `docs/MANAGER_QUALIFICATION.md` first. Attach only the generated public report. Private reports, GPU UUIDs, API keys, wallet signatures, and environment files must not be posted here.
+  - type: dropdown
+    id: hardware_class
+    attributes:
+      label: Manager-reported class
+      description: Use the exact non-null qualification_class from the recommend command.
+      options:
+        - minimum
+        - midrange
+        - datacenter
+    validations:
+      required: true
+  - type: dropdown
+    id: operating_system
+    attributes:
+      label: Operating system
+      options:
+        - Linux x86_64
+        - Windows x86_64
+    validations:
+      required: true
+  - type: input
+    id: profile_version
+    attributes:
+      label: Profile version
+      placeholder: 0.2.4
+    validations:
+      required: true
+  - type: textarea
+    id: public_report
+    attributes:
+      label: Public report
+      description: Drag the generated *-public.json file here after creating the issue, or provide a link to it. Do not attach the private report.
+      placeholder: I will attach the privacy-safe public JSON report.
+    validations:
+      required: true
+  - type: checkboxes
+    id: acknowledgements
+    attributes:
+      label: Safety and scope
+      options:
+        - label: I did not include a private report, GPU UUID, Grid credential, wallet signature, environment file, or private key.
+          required: true
+        - label: I understand this is unpaid release testing and does not create rewards, den, stake, or guaranteed future earnings.
+          required: true

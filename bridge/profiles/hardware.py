@@ -179,6 +179,37 @@ def evaluate_hardware(
     )
 
 
+def qualification_class(
+    profile: Mapping[str, Any],
+    recommendation: Recommendation,
+) -> str | None:
+    """Return the public-release hardware class for a supported selection."""
+
+    selected = recommendation.selected_accelerator
+    if selected is None or recommendation.status == "unsupported":
+        return None
+    recommended_vram = int(profile["hardware"]["recommended"]["vram_mb"])
+    datacenter_vram = int(
+        profile["release_qualification"]["datacenter_min_vram_mb"]
+    )
+    if (
+        recommendation.status == "supported"
+        and selected.memory_mb < recommended_vram
+    ):
+        return "minimum"
+    if (
+        recommendation.status == "recommended"
+        and selected.memory_mb < datacenter_vram
+    ):
+        return "midrange"
+    if (
+        recommendation.status == "recommended"
+        and selected.memory_mb >= datacenter_vram
+    ):
+        return "datacenter"
+    return None
+
+
 def _detect_nvidia() -> Sequence[AcceleratorInfo]:
     executable = shutil.which("nvidia-smi")
     if not executable:

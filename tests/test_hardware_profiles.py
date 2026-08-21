@@ -11,6 +11,7 @@ from bridge.profiles.hardware import (
     HardwareSnapshot,
     detect_hardware,
     evaluate_hardware,
+    qualification_class,
 )
 from bridge.profiles.profile import bundled_profile_path, load_profile
 
@@ -48,6 +49,34 @@ def test_realistic_nvidia_tiers(
         "capability_tier": result.capability_tier,
     }
     assert "accelerator" not in result.registration_summary()
+
+
+@pytest.mark.parametrize(
+    ("vram_mb", "ram_mb", "disk_mb", "expected"),
+    [
+        (12288, 32768, 49152, "minimum"),
+        (24576, 65536, 65536, "midrange"),
+        (81920, 262144, 1048576, "datacenter"),
+    ],
+)
+def test_release_qualification_class_is_derived_from_selected_hardware(
+    profile, vram_mb, ram_mb, disk_mb, expected
+):
+    snapshot = HardwareSnapshot(
+        "linux",
+        "x86_64",
+        ram_mb,
+        disk_mb,
+        (AcceleratorInfo("nvidia", expected, vram_mb, "580.1", "12.8"),),
+    )
+
+    assert qualification_class(profile, evaluate_hardware(snapshot, profile)) == expected
+
+
+def test_unsupported_hardware_has_no_qualification_class(profile):
+    snapshot = HardwareSnapshot("linux", "x86_64", 32768, 49152, ())
+
+    assert qualification_class(profile, evaluate_hardware(snapshot, profile)) is None
 
 
 def test_old_driver_is_unsupported(profile):

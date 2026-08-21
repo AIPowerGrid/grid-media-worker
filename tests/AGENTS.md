@@ -24,7 +24,7 @@ and the WebSocket worker.
 - `test_manager_release.py` - exact manager binary/SBOM payload, aggregate
   checksums, signed public-profile gates, and tamper rejection.
 - `test_hardware_profiles.py` - local detection, privacy-safe summaries, and
-  minimum/midrange/datacenter recommendation fixtures.
+  authoritative minimum/midrange/datacenter qualification-class fixtures.
 - `test_profile_installer.py` - resumable artifact download, constrained source
   archive extraction, commitment checks, and filesystem-containment behavior.
 - `test_profile_canary.py` - real ACE-Step API lifecycle parsing and WAV quality gates.

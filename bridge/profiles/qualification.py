@@ -12,7 +12,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping
 
-from .hardware import AcceleratorInfo, HardwareSnapshot, evaluate_hardware
+from .hardware import (
+    AcceleratorInfo,
+    HardwareSnapshot,
+    evaluate_hardware,
+    qualification_class,
+)
 from .profile import canonical_profile_bytes
 from .state import profile_digest
 
@@ -116,7 +121,15 @@ def _verify_report(
     selected = recommendation.selected_accelerator
     if selected is None or recommendation.status == "unsupported":
         raise QualificationError(f"{hardware_class} report is not supported by the profile")
-    _verify_hardware_class(profile, policy, hardware_class, recommendation.status, selected.memory_mb)
+    actual_class = qualification_class(profile, recommendation)
+    if actual_class != hardware_class:
+        raise QualificationError(
+            f"{hardware_class} report does not satisfy its VRAM/recommendation class"
+        )
+    if report.get("qualification_class") != actual_class:
+        raise QualificationError(
+            f"{hardware_class} report has mismatched qualification_class"
+        )
 
     created_at = report.get("created_at")
     try:
@@ -176,26 +189,6 @@ def _hardware_snapshot(hardware_class: str, value: Mapping[str, Any]) -> Hardwar
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise QualificationError(f"{hardware_class} hardware inventory is malformed") from exc
-
-
-def _verify_hardware_class(
-    profile: Mapping[str, Any],
-    policy: Mapping[str, Any],
-    hardware_class: str,
-    status: str,
-    vram_mb: int,
-) -> None:
-    recommended_vram = profile["hardware"]["recommended"]["vram_mb"]
-    datacenter_vram = policy["datacenter_min_vram_mb"]
-    valid = {
-        "minimum": status == "supported" and vram_mb < recommended_vram,
-        "midrange": status == "recommended" and vram_mb < datacenter_vram,
-        "datacenter": status == "recommended" and vram_mb >= datacenter_vram,
-    }[hardware_class]
-    if not valid:
-        raise QualificationError(
-            f"{hardware_class} report does not satisfy its VRAM/recommendation class"
-        )
 
 
 def _verify_canary_results(

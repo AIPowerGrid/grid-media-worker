@@ -22,7 +22,8 @@ successful canary.
 - `state.py` - privacy-safe install/canary state and authoritative capability gate.
 - `canary.py` - deterministic ACE-Step API generation and WAV validation.
 - `benchmark.py` - repeatable canary measurements with separate private and
-  privacy-safe report formats.
+  privacy-safe report formats; both bind the manager-derived release hardware
+  class.
 - `qualification.py` - offline recomputation of minimum, midrange, and
   datacenter benchmark evidence plus a privacy-safe manifest commitment.
 - `release.py` - offline final-profile promotion, RecipeVault-root binding, and
@@ -60,6 +61,8 @@ successful canary.
 - An active release requires distinct private reports for every hardware class
   declared by its qualification policy; only their privacy-safe manifest hash
   is bound into the signed profile.
+- Hardware-class derivation is centralized in `hardware.py`; operator output,
+  benchmark evidence, and offline qualification must agree on that result.
 - A managed profile also requires the payout wallet to delegate to a local,
   funds-less worker signer. The payout private key must never be copied to the
   worker host; see `bridge/identity.py`.

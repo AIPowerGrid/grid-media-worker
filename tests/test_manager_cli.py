@@ -29,6 +29,27 @@ def test_inspect_reports_core_allowlist_digest(monkeypatch, capsys):
     assert inspected["profile_digest"] != inspected["runtime_digest"]
 
 
+@pytest.mark.asyncio
+async def test_recommend_reports_authoritative_release_class(monkeypatch, capsys):
+    accelerator = AcceleratorInfo(
+        "nvidia", "RTX", 24576, "580.1", "12.8", 0, "GPU-test",
+    )
+    snapshot = HardwareSnapshot(
+        "linux", "x86_64", 65536, 131072, (accelerator,),
+    )
+    monkeypatch.setattr(manager_cli, "detect_hardware", lambda *_a, **_k: snapshot)
+
+    args = manager_cli._parser().parse_args(
+        ["--allow-unsigned-draft", "recommend", "--gpu", "GPU-test"]
+    )
+    await manager_cli._run(args)
+
+    result = json.loads(capsys.readouterr().out)
+    assert result["status"] == "recommended"
+    assert result["qualification_class"] == "midrange"
+    assert result["qualification_runs_required"] == 3
+
+
 def test_identity_generate_and_show_through_cli(tmp_path, monkeypatch, capsys):
     key_path = tmp_path / "worker-key.json"
     delegation_path = tmp_path / "delegation.json"

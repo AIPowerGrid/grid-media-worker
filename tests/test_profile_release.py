@@ -76,6 +76,7 @@ def _qualification_reports(tmp_path, profile_path=None):
             "recipe_vault_root": None,
             "recommendation_status": status,
             "capability_tier": capability_tier,
+            "qualification_class": hardware_class,
             "runs": 3,
             "metrics": {
                 "elapsed_seconds": {"min": 8.0, "median": 9.0, "max": 10.0},

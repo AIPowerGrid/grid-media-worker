@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable, Mapping, Sequence
 
 from .canary import CanaryResult
-from .hardware import HardwareSnapshot, Recommendation
+from .hardware import HardwareSnapshot, Recommendation, qualification_class
 from .state import profile_digest
 
 BENCHMARK_VERSION = 1
@@ -63,6 +63,11 @@ async def run_profile_benchmark(
 
     metrics = _metrics(results, samples)
     created_at = datetime.now(timezone.utc).isoformat()
+    hardware_class = qualification_class(profile, recommendation)
+    if hardware_class is None:
+        raise ValueError(
+            "supported hardware does not map to a release qualification class"
+        )
     commitment = {
         "benchmark_version": BENCHMARK_VERSION,
         "created_at": created_at,
@@ -74,6 +79,7 @@ async def run_profile_benchmark(
         "recipe_vault_root": profile["recipe"]["onchain_root"],
         "recommendation_status": recommendation.status,
         "capability_tier": recommendation.capability_tier,
+        "qualification_class": hardware_class,
         "runs": len(results),
         "metrics": metrics,
     }

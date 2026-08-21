@@ -109,7 +109,12 @@ grid-media-manager --allow-unsigned-draft install --gpu 0
 Release qualification uses a repeatable three-run benchmark. The local report
 contains exact hardware diagnostics and is written with private permissions;
 the optional shareable report contains only profile commitments, the coarse
-tier, and measured performance:
+tier, and measured performance.
+
+The public cohort process and current hardware-class matrix are documented in
+[`docs/MANAGER_QUALIFICATION.md`](docs/MANAGER_QUALIFICATION.md). Never upload a
+private report to GitHub; use the issue form only for the generated public
+report.
 
 ```bash
 grid-media-manager --allow-unsigned-draft benchmark \

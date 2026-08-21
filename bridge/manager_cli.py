@@ -26,7 +26,11 @@ from .identity import (
 )
 from .profiles.canary import run_ace_step_canary
 from .profiles.benchmark import run_profile_benchmark, write_benchmark_report
-from .profiles.hardware import detect_hardware, evaluate_hardware
+from .profiles.hardware import (
+    detect_hardware,
+    evaluate_hardware,
+    qualification_class,
+)
 from .profiles.installer import ProfileInstaller
 from .profiles.profile import bundled_profile_path, load_profile
 from .profiles.state import (
@@ -240,6 +244,7 @@ async def _run(args: argparse.Namespace) -> None:
         accelerator_selector=accelerator_selector,
     )
     if args.command == "recommend":
+        hardware_class = qualification_class(document.profile, recommendation)
         print(
             json.dumps(
                 {
@@ -256,6 +261,10 @@ async def _run(args: argparse.Namespace) -> None:
                     ),
                     "reasons": recommendation.reasons,
                     "warnings": recommendation.warnings,
+                    "qualification_class": hardware_class,
+                    "qualification_runs_required": document.profile[
+                        "release_qualification"
+                    ]["runs_per_class"],
                 },
                 indent=2,
             )
