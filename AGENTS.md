@@ -140,6 +140,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 - GitHub immutable releases must remain enabled. Draft assets may be replaced
   during qualification, but after publication the tag and assets are permanent;
   corrections require a new version.
+- Every pull request and `main` push builds and smokes the manager on Linux and
+  Windows. Branch protection requires the stable `Manager release gate` job so
+  packaging cannot be bypassed by path filtering or an unrequired matrix job.
 
 ## Child DOX Index
 

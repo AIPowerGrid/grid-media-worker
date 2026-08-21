@@ -8,29 +8,7 @@ on:
     tags:
       - "manager-v*"
       - "manager-qualification-v*"
-    paths:
-      - "bridge/**"
-      - "tests/**"
-      - "manager_entry.py"
-      - "profile_release.py"
-      - "verify_manager_release.py"
-      - "verify_manager_qualification_release.py"
-      - "grid-media-manager.spec"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/manager-build.yml"
   pull_request:
-    paths:
-      - "bridge/**"
-      - "tests/**"
-      - "manager_entry.py"
-      - "profile_release.py"
-      - "verify_manager_release.py"
-      - "verify_manager_qualification_release.py"
-      - "grid-media-manager.spec"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/manager-build.yml"
 
 jobs:
   build:
@@ -383,3 +361,16 @@ jobs:
               --title "Grid Media Manager ${RELEASE_TAG#manager-v}" \
               --notes "Draft only: publish after hardware qualification, Windows code signing, and supervised staging validation."
           fi
+
+  manager-release-gate:
+    name: Manager release gate
+    if: always()
+    needs: [build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    steps:
+      - name: Require every platform build
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+        run: test "$BUILD_RESULT" = success
