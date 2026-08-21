@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from verify_manager_release import PAYLOADS, verify_release
+from bridge.release_verifier import PAYLOADS, verify_release
 
 
 def _release_payload(tmp_path: Path) -> Path:

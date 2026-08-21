@@ -39,6 +39,8 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   execution and shell-free child-process supervision.
 - `identity.py` - funds-less worker key, payout-wallet delegation, registration
   proof, and signed job receipts.
+- `release_verifier.py` - offline verification for exact manager binaries,
+  aggregate checksums, signed-profile release gates, and SPDX SBOM metadata.
 
 ## Local Contracts
 
