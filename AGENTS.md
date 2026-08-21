@@ -70,8 +70,10 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   they can assemble a checksummed, SPDX-SBOM-bearing, provenance-attested draft
   GitHub Release. The final manifest records Windows Authenticode state; CI
   never publishes that draft.
-- `.github/workflows/secret-scan.yml` and `.gitleaks.toml` enforce
-  checksum-verified secret and operational-infrastructure scanning.
+- `.github/workflows/secret-scan.yml`, `.gitleaks.toml`, and
+  `.gitleaksignore` enforce checksum-verified tracked-tree and complete
+  reachable-history scanning. Historical exceptions are exact reviewed
+  fingerprints, never broad path/rule exclusions.
 - `.github/ISSUE_TEMPLATE/media-manager-qualification.yml` recruits hardware
   qualification candidates while explicitly forbidding private reports and
   credentials in public issues. The operator runbook is
@@ -125,7 +127,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 - `pytest tests/` — CI runs it on Python 3.10–3.12 (`.github/workflows/test.yml`).
 - `uv lock --check`, then export all extras with hashes and run
   `pip-audit==2.9.0 --require-hashes --disable-pip` against that export.
-- `gitleaks detect --source . --no-git --config .gitleaks.toml --redact`
+- `gitleaks detect --source . --no-git --config .gitleaks.toml --redact`, then
+  `gitleaks git . --log-opts=HEAD --config .gitleaks.toml --redact` from a full
+  clone.
 - Release packaging: install `.[release]`, build `grid-media-manager.spec`, then
   run `--help`, unsigned-draft inspection, and temporary worker-key generation
   against the resulting executable. The spec embeds pinned `uv`; build outputs

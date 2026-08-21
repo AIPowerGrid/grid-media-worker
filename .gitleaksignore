@@ -1,0 +1,10 @@
+# Reviewed 2026-08-21. Exact historical fingerprints only.
+#
+# The retired HTML bundle contains one historical 22-character credential at
+# its persisted setting and redaction sites. Production rejects that credential
+# with HTTP 401. The other entry is a retired developer-path disclosure. This
+# file records no secret value and must never contain a broad rule, path, or
+# regex exclusion.
+184057b9846044b48178e13f0f6e4e4a4f56d39a:chat_generate_example_huge_front_end_sorry.html:generic-api-key:3265
+184057b9846044b48178e13f0f6e4e4a4f56d39a:chat_generate_example_huge_front_end_sorry.html:generic-api-key:6613
+cf45767151a5d25f103f2d38cee46596ef32ded0:AGENTS.md:aipg-local-dev-path:58
