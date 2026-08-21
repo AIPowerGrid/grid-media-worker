@@ -50,16 +50,17 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-          cache: pip
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          enable-cache: false
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y binutils
       - name: Build standalone manager
         shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install 'uv==0.11.28'
-          uv sync --frozen --extra test --extra release
+          uv sync --frozen --extra test --extra release --python 3.12
           uv run --frozen --extra test --extra release pytest -q
           uv run --frozen --extra test --extra release pyinstaller --clean --noconfirm grid-media-manager.spec
       - name: Smoke-test bundled command and profile

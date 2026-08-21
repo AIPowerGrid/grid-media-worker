@@ -68,6 +68,10 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   GitHub Release; CI never publishes that draft.
 - `.github/workflows/secret-scan.yml` and `.gitleaks.toml` enforce
   checksum-verified secret and operational-infrastructure scanning.
+- `.github/workflows/test.yml` installs the exact `uv.lock` graph on every
+  supported Python version and audits the complete locked default, test, and
+  release dependency set. CI must not fall back to an ad hoc pip install when
+  package metadata or the lock is broken.
 
 ## Local Contracts
 
@@ -111,6 +115,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 ## Verification
 
 - `pytest tests/` — CI runs it on Python 3.10–3.12 (`.github/workflows/test.yml`).
+- `uv lock --check`, then export all extras with hashes and run
+  `pip-audit==2.9.0 --require-hashes --disable-pip` against that export.
 - `gitleaks detect --source . --no-git --config .gitleaks.toml --redact`
 - Release packaging: install `.[release]`, build `grid-media-manager.spec`, then
   run `--help`, unsigned-draft inspection, and temporary worker-key generation
