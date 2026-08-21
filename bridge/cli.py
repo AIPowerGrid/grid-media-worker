@@ -2,6 +2,16 @@ import logging
 import sys
 
 logger = logging.getLogger(__name__)
+LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+
+
+def validated_bridge_host(value: object) -> str:
+    host = str(value or "").strip().lower()
+    if host not in LOOPBACK_HOSTS:
+        raise RuntimeError(
+            "Comfy Bridge UI may bind only to loopback; use an SSH tunnel for remote access"
+        )
+    return host
 
 
 def main():
@@ -14,7 +24,7 @@ def main():
     from .config import Settings
     from .web.app import app  # noqa: F401 — triggers route registration
 
-    host = Settings.BRIDGE_HOST
+    host = validated_bridge_host(Settings.BRIDGE_HOST)
     port = Settings.BRIDGE_PORT
 
     logger.info(f"Starting Comfy Bridge on http://{host}:{port}")

@@ -76,6 +76,10 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   network capability that Core has retired.
 - Managed third-party runtimes run at warning log level so request prompts and
   lyrics are not persisted in service journals.
+- Local control surfaces return stable error classes, not raw exception or
+  subprocess output. Detailed diagnostics remain in local process logs.
+- Job failures sent to Core are generic and never contain local paths or raw
+  backend exception text; operators diagnose the detailed local log entry.
 - A pending enrollment remains authoritative until Core activation is ACKed.
   Existing credential files must not short-circuit a pending ACK retry.
 

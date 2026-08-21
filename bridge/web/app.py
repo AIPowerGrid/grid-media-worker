@@ -6,6 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ..config import Settings
 
@@ -47,14 +48,13 @@ async def _run_worker():
             except asyncio.CancelledError:
                 logger.info("Worker task cancelled.")
                 raise
-            except Exception as exc:
-                logger.error(
-                    "Worker startup failed: %s; retrying in %ss",
-                    exc,
+            except Exception:
+                logger.exception(
+                    "Worker startup failed; retrying in %ss",
                     WORKER_START_RETRY_SECONDS,
                 )
                 worker_state["running"] = False
-                worker_state["error"] = str(exc)
+                worker_state["error"] = "Worker unavailable; retrying"
             finally:
                 await worker.comfy.aclose()
 
@@ -99,6 +99,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Comfy Bridge", lifespan=lifespan)
+app.add_middleware(
+    TrustedHostMiddleware,
+    allowed_hosts=["127.0.0.1", "localhost", "[::1]"],
+)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 

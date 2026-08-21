@@ -101,13 +101,7 @@
         <div class="install-card">
           <p class="install-step-label">Step 1 — Install comfy-cli</p>
           <p class="field-hint" style="margin-bottom: 0.75rem;">comfy-cli is the official tool for installing and managing ComfyUI.</p>
-          <button type="button" class="btn btn-outline" @click="installComfyCli()" :disabled="installing_cli">
-            <span x-show="!installing_cli">Install comfy-cli</span>
-            <span x-show="installing_cli"><span class="spinner-sm"></span> Installing comfy-cli...</span>
-          </button>
-          <div class="field-hint" x-show="cli_install_error" style="color: var(--red); margin-top: 0.4rem;" x-text="cli_install_error"></div>
-          <div class="field-hint" x-show="cli_install_ok" style="color: var(--green); margin-top: 0.4rem;">comfy-cli installed</div>
-          <p class="field-hint" style="margin-top: 0.5rem;">Or install manually: <code>pip install comfy-cli</code></p>
+          <p class="field-hint">Install it explicitly from a terminal: <code>pip install comfy-cli</code>, then select Re-detect.</p>
         </div>
       </template>
 
@@ -118,10 +112,7 @@
             Install ComfyUI via comfy-cli
             <span class="tag" style="margin-left: 0.4rem;" x-text="'using ' + detection.comfy_cli_path"></span>
           </p>
-          <label class="field" style="margin-top: 0.75rem;">
-            <span class="field-label">Install path <span class="optional">(leave blank for default)</span></span>
-            <input type="text" x-model="comfyui_install_path" placeholder="e.g. ~/ComfyUI">
-          </label>
+          <p class="field-hint" style="margin-top: 0.75rem;">Installs to <code>~/ComfyUI</code>. Use comfy-cli directly for a custom location.</p>
           <button type="button" class="btn btn-outline" @click="installComfyUI()" :disabled="installing_comfyui">
             <span x-show="!installing_comfyui">Install ComfyUI</span>
             <span x-show="installing_comfyui"><span class="spinner-sm"></span> Installing... this may take a few minutes</span>
@@ -238,8 +229,8 @@ function setupWizard() {
     detecting: true,
     detection: { found: false, checked: false, methods: [], comfy_cli_available: false, comfy_cli_path: null },
     config: {
-      comfyui_url: '{{ detection.url or "http://127.0.0.1:8188" }}',
-      comfyui_base_path: '{{ detection.base_path or "" }}',
+      comfyui_url: {{ (detection.url or "http://127.0.0.1:8188") | tojson }},
+      comfyui_base_path: {{ (detection.base_path or "") | tojson }},
       api_key: '',
       worker_name: '',
       models: '',
@@ -247,12 +238,7 @@ function setupWizard() {
     },
     checking_url: false,
     url_status: null,
-    // comfy-cli install
-    installing_cli: false,
-    cli_install_error: null,
-    cli_install_ok: false,
     // ComfyUI install
-    comfyui_install_path: '',
     installing_comfyui: false,
     comfyui_install_error: null,
     comfyui_install_ok: false,
@@ -295,25 +281,6 @@ function setupWizard() {
       }
     },
 
-    async installComfyCli() {
-      this.installing_cli = true;
-      this.cli_install_error = null;
-      this.cli_install_ok = false;
-      try {
-        const r = await fetch('/api/setup/install-comfy-cli', { method: 'POST' });
-        const d = await r.json();
-        if (d.ok) {
-          this.cli_install_ok = true;
-          // Re-detect so comfy_cli_available updates
-          await this.runDetect();
-        } else {
-          this.cli_install_error = d.error;
-        }
-      } finally {
-        this.installing_cli = false;
-      }
-    },
-
     async installComfyUI() {
       this.installing_comfyui = true;
       this.comfyui_install_error = null;
@@ -322,10 +289,7 @@ function setupWizard() {
         const r = await fetch('/api/setup/install-comfyui', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            path: this.comfyui_install_path || null,
-            comfy_bin: this.detection.comfy_cli_path || null,
-          }),
+          body: JSON.stringify({}),
         });
         const d = await r.json();
         if (d.ok) {

@@ -396,10 +396,12 @@ class WSWorker:
 
         try:
             await self._generate_and_upload(ws, msg, payload, upload_slots, n)
-        except Exception as e:
-            logger.error(f"Job {job_id} failed: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Job %s failed", job_id)
             await ws.send(json.dumps({
-                "type": "error", "id": job_id, "message": str(e)[:300],
+                "type": "error",
+                "id": job_id,
+                "message": "Worker generation failed; see operator logs",
             }))
 
     async def _generate_and_upload(self, ws, msg, payload, upload_slots, n):

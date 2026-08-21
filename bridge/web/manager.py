@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import secrets
@@ -52,6 +53,7 @@ _SECRET_PATTERNS = (
     re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s]+"),
     re.compile(r"(?i)(api[_-]?key\s*[:=]\s*)[^\s,}\]]+"),
 )
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -308,9 +310,9 @@ def create_manager_app(
         try:
             await controller.start(str(action))
         except ValueError as exc:
-            raise HTTPException(400, str(exc)) from exc
+            raise HTTPException(400, "unsupported manager action") from exc
         except RuntimeError as exc:
-            raise HTTPException(409, str(exc)) from exc
+            raise HTTPException(409, "a manager operation is already running") from exc
         return {"ok": True, "action": action}
 
     return app
@@ -369,7 +371,8 @@ def _manager_status(
             allow_unsigned_draft=config.allow_unsigned_draft,
         )
     except (OSError, ValueError) as exc:
-        result["profile"]["error"] = str(exc)
+        logger.warning("Manager profile inspection failed", exc_info=exc)
+        result["profile"]["error"] = "Profile is unavailable or invalid"
         return result
 
     profile = document.profile
@@ -396,7 +399,8 @@ def _manager_status(
             "error": None,
         }
     except ProfileStateError as exc:
-        result["installation"]["error"] = str(exc)
+        logger.warning("Manager installation-state inspection failed", exc_info=exc)
+        result["installation"]["error"] = "Installation is incomplete or invalid"
 
     try:
         snapshot = detect_hardware(config.install_root)
@@ -425,7 +429,8 @@ def _manager_status(
             "warnings": list(recommendation.warnings),
         }
     except (OSError, RuntimeError, ValueError) as exc:
-        result["hardware"]["reasons"] = [str(exc)]
+        logger.warning("Manager hardware detection failed", exc_info=exc)
+        result["hardware"]["reasons"] = ["Hardware detection failed"]
 
     try:
         if config.key.exists():
@@ -438,7 +443,8 @@ def _manager_status(
             result["identity"]["connected"] = True
             result["identity"]["worker_name"] = credentials["worker_name"]
     except (OSError, ValueError, EnrollmentClientError) as exc:
-        result["identity"]["error"] = str(exc)
+        logger.warning("Manager identity inspection failed", exc_info=exc)
+        result["identity"]["error"] = "Worker identity is unavailable or invalid"
 
     result["ready"] = bool(
         document.signature_verified

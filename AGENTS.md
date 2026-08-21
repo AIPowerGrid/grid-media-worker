@@ -94,6 +94,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   opens the loopback-only port 8791 control surface. It supervises the same CLI
   lifecycle commands and cannot bypass profile signature, canary, enrollment,
   or capability-advertisement gates.
+- **Legacy and managed control UIs are loopback-only.** Remote operation uses an
+  SSH tunnel; browser mutations require an exact local Origin and never accept
+  a browser-selected executable.
 
 ## Work Guidance
 

@@ -1,3 +1,5 @@
+from unittest.mock import AsyncMock
+
 import pytest
 import respx
 from httpx import Response
@@ -104,6 +106,31 @@ def test_media_result_hash_orders_outputs_by_index():
         {"index": 1, "sha256": "b" * 64},
     ]
     assert media_result_hash(list(reversed(ordered))) == media_result_hash(ordered)
+
+
+@pytest.mark.asyncio
+async def test_job_error_does_not_expose_worker_exception_details(monkeypatch):
+    worker = WSWorker()
+    socket = AsyncMock()
+    monkeypatch.setattr(
+        worker,
+        "_generate_and_upload",
+        AsyncMock(side_effect=RuntimeError("private path /operator/models/secret")),
+    )
+    try:
+        await worker._handle_job(
+            socket,
+            {"id": "job-1", "model": "model", "job_type": "image", "payload": {}},
+        )
+    finally:
+        await worker.comfy.aclose()
+
+    message = ws_worker_module.json.loads(socket.send.await_args.args[0])
+    assert message == {
+        "type": "error",
+        "id": "job-1",
+        "message": "Worker generation failed; see operator logs",
+    }
 
 
 @pytest.mark.asyncio

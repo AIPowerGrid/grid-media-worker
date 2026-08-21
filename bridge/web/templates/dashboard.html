@@ -55,7 +55,7 @@ function dashboard() {
   return {
     status: {
       worker_running: {{ 'true' if worker_running else 'false' }},
-      worker_error: {{ ('\"' + worker_error + '\"') if worker_error else 'null' }},
+      worker_error: {{ worker_error | tojson }},
       config: null,
     },
     async poll() {

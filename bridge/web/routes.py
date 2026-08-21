@@ -1,16 +1,68 @@
 import logging
+import os
 from pathlib import Path
 
 from fastapi import Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ..config import Settings
-from ..comfyui_detect import detect_comfyui, check_comfyui_url, install_comfy_cli, install_comfyui_via_cli
+from ..comfyui_detect import (
+    check_comfyui_url,
+    detect_comfyui,
+    install_comfyui_via_cli,
+    validated_comfyui_url,
+)
 from .app import app, templates, worker_state, start_worker, stop_worker
 
 logger = logging.getLogger(__name__)
 
 ENV_PATH = Path.cwd() / ".env"
+_PERSISTED_SETTINGS = frozenset(
+    {
+        "COMFYUI_BASE_PATH",
+        "COMFYUI_URL",
+        "GRID_API_KEY",
+        "GRID_BATCH_SIZE",
+        "GRID_MAX_PIXELS",
+        "GRID_MODEL",
+        "GRID_NSFW",
+        "GRID_THREADS",
+        "GRID_WORKER_NAME",
+        "WORKFLOW_FILE",
+    }
+)
+_JSON_POST_PATHS = frozenset(
+    {
+        "/api/setup/check-url",
+        "/api/setup/install-comfyui",
+        "/api/setup/complete",
+        "/api/settings",
+    }
+)
+
+
+def _secure_headers(response):
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    return response
+
+
+@app.middleware("http")
+async def local_control_guard(request: Request, call_next):
+    """Reject cross-origin and non-JSON browser mutations on the local UI."""
+    if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        expected_origin = str(request.base_url).rstrip("/")
+        if request.headers.get("origin") != expected_origin:
+            return _secure_headers(JSONResponse({"detail": "invalid origin"}, status_code=403))
+        if (
+            request.url.path in _JSON_POST_PATHS
+            and request.headers.get("content-type", "").split(";", 1)[0]
+            != "application/json"
+        ):
+            return _secure_headers(JSONResponse({"detail": "JSON required"}, status_code=415))
+    return _secure_headers(await call_next(request))
 
 
 # ---------------------------------------------------------------------------
@@ -60,13 +112,6 @@ async def api_detect():
     }
 
 
-@app.post("/api/setup/install-comfy-cli")
-async def api_install_comfy_cli():
-    """Install comfy-cli via pip into the bridge's Python environment."""
-    result = install_comfy_cli()
-    return result
-
-
 @app.post("/api/setup/check-url")
 async def api_check_url(request: Request):
     """Check if a ComfyUI URL is reachable."""
@@ -80,16 +125,19 @@ async def api_check_url(request: Request):
 async def api_install_comfyui(request: Request):
     """Install ComfyUI via comfy-cli."""
     body = await request.json()
-    install_path = body.get("path")
-    comfy_bin = body.get("comfy_bin")
-    result = install_comfyui_via_cli(comfy_bin=comfy_bin, install_path=install_path)
+    if not isinstance(body, dict) or body:
+        return JSONResponse({"ok": False, "error": "Unsupported install option"}, status_code=400)
+    result = install_comfyui_via_cli()
     return result
 
 
 @app.post("/api/setup/complete")
 async def api_complete_setup(request: Request):
     """Save config and start the worker."""
-    form = await request.json()
+    try:
+        form = _validated_settings_form(await request.json())
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "Invalid worker settings"}, status_code=400)
 
     # Build .env content, preserving any existing keys not in the form
     env_lines = _read_existing_env()
@@ -97,9 +145,7 @@ async def api_complete_setup(request: Request):
         if value is not None and value != "":
             env_lines[key] = value
 
-    # Write .env
-    content = "\n".join(f"{k}={v}" for k, v in env_lines.items()) + "\n"
-    ENV_PATH.write_text(content)
+    _write_env(env_lines)
 
     # Reload settings in memory
     _reload_settings(form)
@@ -173,7 +219,10 @@ async def settings_page(request: Request):
 @app.post("/api/settings")
 async def save_settings(request: Request):
     """Save settings to .env and update in-memory config."""
-    form = await request.json()
+    try:
+        form = _validated_settings_form(await request.json())
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "Invalid worker settings"}, status_code=400)
 
     env_lines = _read_existing_env()
     for key, value in form.items():
@@ -182,8 +231,7 @@ async def save_settings(request: Request):
         elif key in env_lines:
             del env_lines[key]
 
-    content = "\n".join(f"{k}={v}" for k, v in env_lines.items()) + "\n"
-    ENV_PATH.write_text(content)
+    _write_env(env_lines)
     _reload_settings(form)
 
     logger.info(f"Settings saved to {ENV_PATH}")
@@ -213,6 +261,47 @@ def _read_existing_env() -> dict:
     return env
 
 
+def _write_env(values: dict) -> None:
+    content = "\n".join(f"{key}={value}" for key, value in values.items()) + "\n"
+    ENV_PATH.write_text(content)
+    if os.name != "nt":
+        os.chmod(ENV_PATH, 0o600)
+
+
+def _validated_settings_form(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        raise ValueError("Settings payload must be an object")
+    unknown = set(value) - _PERSISTED_SETTINGS
+    if unknown:
+        raise ValueError("Settings payload contains unsupported fields")
+
+    form: dict[str, str] = {}
+    for key, raw in value.items():
+        text = str(raw) if raw is not None else ""
+        if len(text) > 4096 or "\n" in text or "\r" in text:
+            raise ValueError(f"Invalid value for {key}")
+        form[key] = text
+
+    if form.get("COMFYUI_URL"):
+        form["COMFYUI_URL"] = validated_comfyui_url(form["COMFYUI_URL"])
+    if "GRID_NSFW" in form and form["GRID_NSFW"].lower() not in {"true", "false"}:
+        raise ValueError("GRID_NSFW must be true or false")
+    for key, lower, upper in (
+        ("GRID_THREADS", 1, 16),
+        ("GRID_BATCH_SIZE", 1, 16),
+        ("GRID_MAX_PIXELS", 1, 134_217_728),
+    ):
+        if key in form and form[key]:
+            try:
+                number = int(form[key])
+            except ValueError as exc:
+                raise ValueError(f"{key} must be an integer") from exc
+            if not lower <= number <= upper:
+                raise ValueError(f"{key} must be between {lower} and {upper}")
+            form[key] = str(number)
+    return form
+
+
 def _reload_settings(form: dict):
     """Update Settings class attributes from form data."""
     if "GRID_API_KEY" in form:
@@ -238,6 +327,3 @@ def _reload_settings(form: dict):
         Settings.BATCH_SIZE = int(form["GRID_BATCH_SIZE"])
     if "COMFYUI_BASE_PATH" in form:
         os.environ["COMFYUI_BASE_PATH"] = form["COMFYUI_BASE_PATH"]
-
-
-import os  # noqa: E402

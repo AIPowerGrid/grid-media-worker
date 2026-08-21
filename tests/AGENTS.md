@@ -7,8 +7,9 @@ and the WebSocket worker.
 
 ## Ownership
 
-- `test_bridge_web.py` - legacy loopback bridge dashboard/settings rendering
-  plus startup-failure supervision against the installed FastAPI/Starlette API.
+- `test_bridge_web.py` - legacy loopback bridge dashboard/settings rendering,
+  same-origin and trusted-executable boundaries, URL/config validation, plus
+  startup-failure supervision against the installed FastAPI/Starlette API.
 - `test_ws_worker.py` - WebSocket registration, dispatch, result, failure
   behavior, and runtime-health capability withdrawal.
 - `test_model_mapper.py` - model-reference resolution and retired-capability

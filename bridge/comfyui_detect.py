@@ -1,16 +1,71 @@
 """Detect or install ComfyUI. Used by the setup wizard."""
 
+import ipaddress
 import logging
 import os
 import shutil
+import socket
 import subprocess
 import sys
-from pathlib import Path
 from dataclasses import dataclass, field
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
 logger = logging.getLogger(__name__)
+_PROHIBITED_METADATA_ADDRESSES = {
+    ipaddress.ip_address("100.100.100.200"),
+    ipaddress.ip_address("169.254.169.254"),
+    ipaddress.ip_address("169.254.170.2"),
+    ipaddress.ip_address("fd00:ec2::254"),
+}
+
+
+def validated_comfyui_url(value: object) -> str:
+    """Validate an operator-owned ComfyUI API endpoint before local probing."""
+    raw = str(value or "").strip()
+    if not raw or len(raw) > 2048:
+        raise ValueError("ComfyUI URL is required and must be at most 2048 characters")
+    if any(ord(char) < 0x20 or ord(char) == 0x7F for char in raw):
+        raise ValueError("ComfyUI URL must not contain control characters")
+    try:
+        parsed = urlsplit(raw)
+        host = (parsed.hostname or "").rstrip(".").lower()
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("ComfyUI URL is malformed") from exc
+    if parsed.scheme not in {"http", "https"} or not host:
+        raise ValueError("ComfyUI URL must use http or https and contain a host")
+    if parsed.username is not None or parsed.password is not None:
+        raise ValueError("ComfyUI URL must not contain embedded credentials")
+    if parsed.query or parsed.fragment:
+        raise ValueError("ComfyUI URL must not contain a query string or fragment")
+    if host in {"metadata", "metadata.google.internal"} or host.endswith(
+        ".metadata.google.internal"
+    ):
+        raise ValueError("ComfyUI URL must not target a cloud metadata service")
+
+    addresses: set[ipaddress.IPv4Address | ipaddress.IPv6Address] = set()
+    try:
+        addresses.add(ipaddress.ip_address(host))
+    except ValueError:
+        try:
+            for item in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+                addresses.add(ipaddress.ip_address(item[4][0]))
+        except socket.gaierror as exc:
+            raise ValueError("ComfyUI host could not be resolved") from exc
+    if not addresses or any(
+        address in _PROHIBITED_METADATA_ADDRESSES
+        or address.is_link_local
+        or address.is_multicast
+        or address.is_unspecified
+        or address.is_reserved
+        for address in addresses
+    ):
+        raise ValueError("ComfyUI URL resolves to a prohibited address")
+
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path.rstrip("/"), "", ""))
 
 
 @dataclass
@@ -76,73 +131,56 @@ def detect_comfyui() -> DetectionResult:
 async def check_comfyui_url(url: str) -> bool:
     """Ping the ComfyUI API to see if it's reachable."""
     try:
+        url = validated_comfyui_url(url)
         async with httpx.AsyncClient(timeout=5) as client:
-            resp = await client.get(f"{url.rstrip('/')}/system_stats")
+            resp = await client.get(f"{url}/system_stats")
             return resp.status_code == 200
     except Exception:
         return False
 
 
-def install_comfy_cli() -> dict:
-    """Install comfy-cli into the current Python environment."""
-    python = sys.executable
-    try:
-        proc = subprocess.run(
-            [python, "-m", "pip", "install", "comfy-cli"],
-            capture_output=True, text=True, timeout=120,
-        )
-        if proc.returncode == 0:
-            # Verify it's now findable
-            comfy_bin = shutil.which("comfy")
-            if not comfy_bin:
-                # Check in the same bin dir as our python
-                bin_dir = Path(python).parent
-                candidate = bin_dir / "comfy"
-                if candidate.exists():
-                    comfy_bin = str(candidate)
-            return {
-                "ok": True,
-                "comfy_path": comfy_bin,
-                "output": proc.stdout[-500:] if len(proc.stdout) > 500 else proc.stdout,
-            }
-        else:
-            return {"ok": False, "error": proc.stderr or proc.stdout}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "error": "pip install timed out (2 min)"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
-
-
-def install_comfyui_via_cli(comfy_bin: str | None = None, install_path: str | None = None) -> dict:
-    """Run comfy-cli to install ComfyUI. Returns status dict."""
-    comfy = comfy_bin or _find_comfy_cli()
+def install_comfyui_via_cli(install_path: str | None = None) -> dict:
+    """Run the server-discovered comfy-cli executable to install ComfyUI."""
+    comfy = _find_comfy_cli()
     if not comfy:
         return {"ok": False, "error": "comfy-cli not found. Install it first."}
 
+    try:
+        target = _validated_install_path(install_path)
+    except ValueError:
+        return {"ok": False, "error": "Invalid ComfyUI install path"}
+
     cmd = [comfy, "install", "--skip-prompt"]
-    if install_path:
-        cmd.extend(["--path", install_path])
+    cmd.extend(["--path", str(target)])
 
     try:
         proc = subprocess.run(
             cmd, capture_output=True, text=True, timeout=600,
         )
         if proc.returncode == 0:
-            return {
-                "ok": True,
-                "output": proc.stdout[-1000:] if len(proc.stdout) > 1000 else proc.stdout,
-            }
-        else:
-            return {"ok": False, "error": proc.stderr or proc.stdout}
+            return {"ok": True}
+        logger.error("ComfyUI installation failed with status %s", proc.returncode)
+        return {"ok": False, "error": "ComfyUI installation failed; see local worker logs"}
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": "Installation timed out (10 min)"}
-    except Exception as e:
-        return {"ok": False, "error": str(e)}
+    except Exception:
+        logger.exception("ComfyUI installation failed")
+        return {"ok": False, "error": "ComfyUI installation failed; see local worker logs"}
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _validated_install_path(value: str | None) -> Path:
+    """Keep browser-initiated installs inside the operator's home directory."""
+    home = Path.home().resolve()
+    target = Path(value or home / "ComfyUI").expanduser().resolve()
+    if target == home or home not in target.parents:
+        raise ValueError("ComfyUI install path must be a directory inside your home folder")
+    if target.exists() and not target.is_dir():
+        raise ValueError("ComfyUI install path must be a directory")
+    return target
 
 def _find_comfy_cli() -> str | None:
     """Find the comfy binary — system PATH, our venv, or sibling venvs."""

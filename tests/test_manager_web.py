@@ -197,6 +197,23 @@ def test_manager_log_redaction_covers_grid_keys_and_bearer_tokens():
     assert value.count("[redacted]") == 2
 
 
+def test_manager_status_does_not_return_profile_exception_details(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    controller = manager.ManagerProcessController(config)
+    monkeypatch.setattr(
+        manager,
+        "load_profile",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            ValueError("invalid profile at /secret/operator/path")
+        ),
+    )
+
+    result = manager._manager_status(config, controller)
+
+    assert result["profile"]["error"] == "Profile is unavailable or invalid"
+    assert "/secret/operator/path" not in json.dumps(result)
+
+
 def test_non_loopback_manager_bind_is_rejected(tmp_path):
     class Args:
         host = "0.0.0.0"
