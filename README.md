@@ -330,6 +330,8 @@ includes `manager-release.json` so `aipowergrid.io/run` can eventually consume
 one reviewed platform/download contract. Public Windows distribution still
 requires code signing before that draft may be promoted. Apple/MPS needs its
 own measured profile rather than inheriting NVIDIA assumptions.
+GitHub immutable releases are enabled: once a qualified draft is published,
+its tag and assets cannot be replaced. Any correction must be a new version.
 
 ## License
 

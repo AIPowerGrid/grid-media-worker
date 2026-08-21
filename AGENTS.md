@@ -124,6 +124,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   remain ignored except for the reviewed spec itself.
 - A release tag is not public approval. The assembled GitHub Release stays draft
   until hardware reports, platform signing, and supervised staging are reviewed.
+- GitHub immutable releases must remain enabled. Draft assets may be replaced
+  during qualification, but after publication the tag and assets are permanent;
+  corrections require a new version.
 
 ## Child DOX Index
 
