@@ -73,7 +73,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 - `.github/workflows/secret-scan.yml`, `.gitleaks.toml`, and
   `.gitleaksignore` enforce checksum-verified tracked-tree and complete
   reachable-history scanning. Historical exceptions are exact reviewed
-  fingerprints, never broad path/rule exclusions.
+  fingerprints, never broad path/rule exclusions; CI also proves that an
+  example-labelled synthetic private key is rejected.
 - `.github/ISSUE_TEMPLATE/media-manager-qualification.yml` recruits hardware
   qualification candidates while explicitly forbidding private reports and
   credentials in public issues. The operator runbook is
