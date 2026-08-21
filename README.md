@@ -16,7 +16,7 @@ through short-lived, presigned URLs. Workers never receive Grid storage keys.
 
 ## ComfyUI Worker
 
-Requirements: Python 3.9+, a running ComfyUI instance, and a Grid API key from
+Requirements: Python 3.10+, a running ComfyUI instance, and a Grid API key from
 [the developer console](https://console.aipowergrid.io/dashboard/api-key).
 
 ```bash
