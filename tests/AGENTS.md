@@ -21,8 +21,9 @@ and the WebSocket worker.
 - `test_profile_release.py` - one-class private pilot and three-class public
   qualification, offline finalization, public RecipeVault-root binding,
   private-key permissions, and self-verifying Ed25519 output.
-- `test_manager_release.py` - exact manager binary/SBOM payload, aggregate
-  checksums, signed public-profile gates, and tamper rejection.
+- `test_manager_release.py` - exact manager and benchmark-only qualification
+  binary/SBOM payloads, aggregate checksums, signed public-profile gates,
+  explicit no-enrollment restrictions, and tamper rejection.
 - `test_hardware_profiles.py` - local detection, privacy-safe summaries, and
   authoritative minimum/midrange/datacenter qualification-class fixtures.
 - `test_profile_installer.py` - resumable artifact download, constrained source
@@ -34,7 +35,8 @@ and the WebSocket worker.
   requests, output validation, and same-origin download enforcement.
 - `test_runtime_process.py` - shell-free runtime launch specification,
   checkpoint binding, loopback enforcement, and low-VRAM offload policy.
-- `test_manager_cli.py` - executable command parsing and local worker-key lifecycle.
+- `test_manager_cli.py` - executable command parsing, local worker-key
+  lifecycle, and unsigned-draft enrollment denial.
 - `test_manager_web.py` - loopback manager session/origin controls, private
   status projection, shell-free action commands, and log redaction.
 - `test_enrollment.py` - TLS URL policy, zero-copy Console pairing, private file

@@ -40,7 +40,8 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 - `identity.py` - funds-less worker key, payout-wallet delegation, registration
   proof, and signed job receipts.
 - `release_verifier.py` - offline verification for exact manager binaries,
-  aggregate checksums, signed-profile release gates, and SPDX SBOM metadata.
+  aggregate checksums, signed-profile release gates, benchmark-only
+  qualification restrictions, and SPDX SBOM metadata.
 
 ## Local Contracts
 
@@ -63,6 +64,9 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   state, and a passed runtime-specific canary. The profile's capabilities
   replace manual model/job-type declarations; direct ACE-Step readiness replaces
   generic ComfyUI preflight.
+- Grid enrollment also requires an active signed profile. An unsigned
+  qualification draft may install and benchmark locally, but it cannot enroll,
+  advertise, set up, or serve a Grid capability.
 - Managed ACE-Step processes run with model-hub offline mode and may launch only
   after the pinned source and exact checkpoint tree revalidate locally.
 - Managed capabilities remain registered only while the supervised runtime

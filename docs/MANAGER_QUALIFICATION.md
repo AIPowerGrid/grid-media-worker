@@ -25,8 +25,26 @@ produce release evidence.
 
 ## Check A Candidate
 
-Use a clean checkout of `main`. Source qualification is intentionally explicit
-because the public manager binary does not exist until this process succeeds.
+Use the provenance-attested qualification prerelease when one is available. It
+is benchmark-only: it cannot enroll with the Grid or advertise capabilities.
+Download the binary and `SHA256SUMS` from the same exact
+`manager-qualification-v*` release, verify both checksum and GitHub provenance,
+then run:
+
+```bash
+sha256sum --check --ignore-missing SHA256SUMS
+gh attestation verify grid-media-manager-linux-x86_64 \
+  --repo AIPowerGrid/grid-media-worker
+chmod +x grid-media-manager-linux-x86_64
+./grid-media-manager-linux-x86_64 \
+  --allow-unsigned-draft recommend --gpu GPU-REPLACE-WITH-NVIDIA-UUID
+```
+
+Windows operators use `grid-media-manager-windows-x86_64.exe` and verify its
+line in `SHA256SUMS` with a local SHA-256 tool plus the same `gh attestation
+verify` command.
+
+When no qualification prerelease exists, use a clean checkout of `main`:
 
 ```bash
 uv sync --frozen --extra test --extra release --python 3.12
@@ -47,14 +65,15 @@ and verifies every pinned runtime and model artifact before execution.
 CLASS=minimum # use exactly the class returned by recommend
 GPU=GPU-REPLACE-WITH-NVIDIA-UUID
 ROOT="$HOME/.aipg/media-worker-qualification"
+MANAGER="uv run --frozen python -m bridge.manager_cli"
 
-uv run --frozen python -m bridge.manager_cli \
+$MANAGER \
   --allow-unsigned-draft install \
   --install-root "$ROOT/install" \
   --state "$ROOT/state-$CLASS.json" \
   --gpu "$GPU"
 
-uv run --frozen python -m bridge.manager_cli \
+$MANAGER \
   --allow-unsigned-draft benchmark \
   --install-root "$ROOT/install" \
   --state "$ROOT/state-$CLASS.json" \
@@ -62,6 +81,10 @@ uv run --frozen python -m bridge.manager_cli \
   --out "$ROOT/$CLASS-private.json" \
   --public-out "$ROOT/$CLASS-public.json"
 ```
+
+For a downloaded Linux qualification binary, set
+`MANAGER=./grid-media-manager-linux-x86_64` instead. On Windows, invoke the
+`.exe` directly with the same arguments.
 
 The benchmark launches the pinned local runtime, runs the profile canary three
 times, samples GPU and host memory, validates the output, and shuts the runtime

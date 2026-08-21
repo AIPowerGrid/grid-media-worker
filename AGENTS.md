@@ -60,9 +60,12 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   evidence. `profile_pilot.py` derives a private, one-hardware-class pilot
   draft that remains ineligible for public release. Neither tool is bundled
   into the public manager executable.
-- `manager_entry.py`, `verify_manager_release.py`, and
+- `manager_entry.py`, `verify_manager_release.py`,
+  `verify_manager_qualification_release.py`, and
   `.github/workflows/manager-build.yml` build, smoke-test, and verify standalone
   manager executables. Relevant main-branch changes build on Linux and Windows.
+  `manager-qualification-v*` tags publish a benchmark-only prerelease whose
+  unsigned draft cannot enroll with the Grid or advertise capabilities.
   Tagged builds require an active, signed, RecipeVault-bound profile before
   they can assemble a checksummed, SPDX-SBOM-bearing, provenance-attested draft
   GitHub Release; CI never publishes that draft.
@@ -126,8 +129,11 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   run `--help`, unsigned-draft inspection, and temporary worker-key generation
   against the resulting executable. The spec embeds pinned `uv`; build outputs
   remain ignored except for the reviewed spec itself.
-- A release tag is not public approval. The assembled GitHub Release stays draft
+- A `manager-v*` tag is not public approval. The assembled GitHub Release stays draft
   until hardware reports, platform signing, and supervised staging are reviewed.
+- A `manager-qualification-v*` prerelease is public benchmark tooling, not a
+  worker release. Its manifest must bind the draft profile and explicitly deny
+  Grid enrollment and capability advertisement.
 - GitHub immutable releases must remain enabled. Draft assets may be replaced
   during qualification, but after publication the tag and assets are permanent;
   corrections require a new version.

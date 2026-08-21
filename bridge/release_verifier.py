@@ -16,10 +16,18 @@ PAYLOADS = (
     "grid-media-manager-windows-x86_64.exe",
     "grid-media-manager-release.spdx.json",
 )
+QUALIFICATION_PAYLOADS = (
+    "grid-media-manager-linux-x86_64",
+    "grid-media-manager-windows-x86_64.exe",
+    "grid-media-manager-qualification.spdx.json",
+)
 REQUIRED_CLASSES = ["minimum", "midrange", "datacenter"]
 HEX_SHA256 = re.compile(r"[0-9a-f]{64}")
 HEX_COMMIT = re.compile(r"[0-9a-f]{40}")
 RELEASE_TAG = re.compile(r"manager-v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?")
+QUALIFICATION_TAG = re.compile(
+    r"manager-qualification-v[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?"
+)
 
 
 def _sha256(path: Path) -> str:
@@ -96,3 +104,104 @@ def verify_release(root: Path) -> None:
     )
     if not str(sbom.get("spdxVersion", "")).startswith("SPDX-"):
         raise ValueError("release SBOM is not SPDX JSON")
+
+
+def verify_qualification_release(root: Path) -> None:
+    """Verify a benchmark-only manager payload that cannot advertise to the Grid."""
+
+    if not root.is_dir():
+        raise ValueError(f"qualification release directory not found: {root}")
+    required = (
+        *QUALIFICATION_PAYLOADS,
+        "manager-qualification.json",
+        "SHA256SUMS",
+    )
+    missing = [name for name in required if not (root / name).is_file()]
+    if missing:
+        raise ValueError(f"missing qualification release assets: {', '.join(missing)}")
+
+    checksums = _read_checksums(root / "SHA256SUMS")
+    if set(checksums) != set(QUALIFICATION_PAYLOADS):
+        raise ValueError(
+            "SHA256SUMS must cover exactly the qualification binaries and SBOM"
+        )
+
+    manifest = json.loads(
+        (root / "manager-qualification.json").read_text(encoding="utf-8")
+    )
+    if manifest.get("schema") != "aipg-manager-qualification-v1":
+        raise ValueError("unsupported manager qualification manifest schema")
+    if QUALIFICATION_TAG.fullmatch(str(manifest.get("tag", ""))) is None:
+        raise ValueError("qualification manifest has an invalid tag")
+    if HEX_COMMIT.fullmatch(str(manifest.get("commit", ""))) is None:
+        raise ValueError("qualification manifest has an invalid commit identity")
+
+    profile = manifest.get("profile") or {}
+    gates = {
+        "draft status": profile.get("status") == "draft",
+        "unsigned profile": profile.get("signature_verified") is False,
+        "no signer": profile.get("signing_key_id") is None,
+        "public qualification scope": profile.get("qualification_scope") == "public",
+        "required classes": profile.get("qualification_required_classes")
+        == REQUIRED_CLASSES,
+        "no qualification manifest": profile.get("qualification_manifest_sha256") is None,
+    }
+    failed = [name for name, passed in gates.items() if not passed]
+    if failed:
+        raise ValueError("qualification profile failed gates: " + ", ".join(failed))
+
+    restrictions = manifest.get("restrictions") or {}
+    if restrictions != {
+        "capability_advertisement": False,
+        "grid_enrollment": False,
+        "purpose": "hardware_qualification_only",
+    }:
+        raise ValueError("qualification release restrictions are incomplete")
+
+    _verify_assets(manifest, root, checksums, QUALIFICATION_PAYLOADS)
+    sbom = json.loads(
+        (root / "grid-media-manager-qualification.spdx.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    if not str(sbom.get("spdxVersion", "")).startswith("SPDX-"):
+        raise ValueError("qualification SBOM is not SPDX JSON")
+
+
+def _read_checksums(path: Path) -> dict[str, str]:
+    checksums: dict[str, str] = {}
+    for raw in path.read_text(encoding="ascii").splitlines():
+        parts = raw.split(maxsplit=1)
+        if len(parts) != 2:
+            raise ValueError(f"invalid SHA256SUMS line: {raw!r}")
+        digest, name = parts
+        name = name.lstrip("*")
+        if name in checksums:
+            raise ValueError(f"duplicate SHA256SUMS entry: {name}")
+        if HEX_SHA256.fullmatch(digest) is None:
+            raise ValueError(f"invalid SHA-256 digest for {name}")
+        checksums[name] = digest
+    return checksums
+
+
+def _verify_assets(
+    manifest: dict,
+    root: Path,
+    checksums: dict[str, str],
+    payloads: tuple[str, ...],
+) -> None:
+    assets = manifest.get("assets")
+    if not isinstance(assets, list) or not all(isinstance(item, dict) for item in assets):
+        raise ValueError("release manifest assets must be a list of objects")
+    if len(assets) != len(payloads) or {item.get("name") for item in assets} != set(
+        payloads
+    ):
+        raise ValueError("release manifest assets do not match the required payload")
+    for item in assets:
+        name = item["name"]
+        path = root / name
+        digest = _sha256(path)
+        if digest != checksums[name] or digest != item.get("sha256"):
+            raise ValueError(f"checksum mismatch: {name}")
+        if path.stat().st_size != item.get("bytes"):
+            raise ValueError(f"size mismatch: {name}")
