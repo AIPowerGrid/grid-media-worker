@@ -4,7 +4,12 @@ from pathlib import Path
 
 import pytest
 
-from bridge.release_verifier import PAYLOADS, verify_release
+from bridge.release_verifier import (
+    PAYLOADS,
+    QUALIFICATION_PAYLOADS,
+    verify_qualification_release,
+    verify_release,
+)
 
 
 def _release_payload(tmp_path: Path) -> Path:
@@ -35,6 +40,45 @@ def _release_payload(tmp_path: Path) -> Path:
     }
     (tmp_path / "manager-release.json").write_text(json.dumps(manifest), encoding="utf-8")
     (tmp_path / "SHA256SUMS").write_text("\n".join(checksum_lines) + "\n", encoding="ascii")
+    return tmp_path
+
+
+def _qualification_payload(tmp_path: Path) -> Path:
+    for name in QUALIFICATION_PAYLOADS:
+        content = b'{"spdxVersion":"SPDX-2.3"}' if name.endswith(".json") else name.encode()
+        (tmp_path / name).write_bytes(content)
+    assets = []
+    checksum_lines = []
+    for name in QUALIFICATION_PAYLOADS:
+        path = tmp_path / name
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        assets.append({"name": name, "sha256": digest, "bytes": path.stat().st_size})
+        checksum_lines.append(f"{digest}  {name}")
+    manifest = {
+        "schema": "aipg-manager-qualification-v1",
+        "tag": "manager-qualification-v0.2.0-preview.1",
+        "commit": "a" * 40,
+        "profile": {
+            "status": "draft",
+            "signature_verified": False,
+            "signing_key_id": None,
+            "qualification_scope": "public",
+            "qualification_required_classes": ["minimum", "midrange", "datacenter"],
+            "qualification_manifest_sha256": None,
+        },
+        "restrictions": {
+            "capability_advertisement": False,
+            "grid_enrollment": False,
+            "purpose": "hardware_qualification_only",
+        },
+        "assets": assets,
+    }
+    (tmp_path / "manager-qualification.json").write_text(
+        json.dumps(manifest), encoding="utf-8"
+    )
+    (tmp_path / "SHA256SUMS").write_text(
+        "\n".join(checksum_lines) + "\n", encoding="ascii"
+    )
     return tmp_path
 
 
@@ -101,3 +145,37 @@ def test_manager_release_rejects_invalid_release_identity(tmp_path):
 
     with pytest.raises(ValueError, match="invalid manager tag"):
         verify_release(root)
+
+
+def test_complete_qualification_release_verifies(tmp_path):
+    verify_qualification_release(_qualification_payload(tmp_path))
+
+
+def test_qualification_release_rejects_active_profile(tmp_path):
+    root = _qualification_payload(tmp_path)
+    manifest_path = root / "manager-qualification.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["profile"]["status"] = "active"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="draft status"):
+        verify_qualification_release(root)
+
+
+def test_qualification_release_rejects_grid_enrollment(tmp_path):
+    root = _qualification_payload(tmp_path)
+    manifest_path = root / "manager-qualification.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["restrictions"]["grid_enrollment"] = True
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="restrictions"):
+        verify_qualification_release(root)
+
+
+def test_qualification_release_rejects_tampered_binary(tmp_path):
+    root = _qualification_payload(tmp_path)
+    (root / "grid-media-manager-linux-x86_64").write_bytes(b"tampered")
+
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        verify_qualification_release(root)

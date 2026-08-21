@@ -50,6 +50,26 @@ async def test_recommend_reports_authoritative_release_class(monkeypatch, capsys
     assert result["qualification_runs_required"] == 3
 
 
+@pytest.mark.asyncio
+async def test_unsigned_draft_cannot_enroll_with_grid(tmp_path, monkeypatch):
+    connected = AsyncMock()
+    monkeypatch.setattr(manager_cli, "connect_worker", connected)
+
+    args = manager_cli._parser().parse_args(
+        [
+            "--allow-unsigned-draft",
+            "connect",
+            "--key",
+            str(tmp_path / "worker-key.json"),
+        ]
+    )
+
+    with pytest.raises(RuntimeError, match="active signed release"):
+        await manager_cli._run(args)
+
+    connected.assert_not_awaited()
+
+
 def test_identity_generate_and_show_through_cli(tmp_path, monkeypatch, capsys):
     key_path = tmp_path / "worker-key.json"
     delegation_path = tmp_path / "delegation.json"

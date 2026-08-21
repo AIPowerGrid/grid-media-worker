@@ -197,6 +197,10 @@ async def _run(args: argparse.Namespace) -> None:
         )
         return
     if args.command == "connect":
+        if document.profile["status"] != "active" or not document.signature_verified:
+            raise RuntimeError(
+                "Grid enrollment requires an active signed release profile"
+            )
         worker_name = _resolved_worker_name(args.worker_name, args.key)
         result = await connect_worker(
             grid_api_url=args.grid_url,

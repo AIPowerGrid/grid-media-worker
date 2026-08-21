@@ -338,6 +338,15 @@ own measured profile rather than inheriting NVIDIA assumptions.
 GitHub immutable releases are enabled: once a qualified draft is published,
 its tag and assets cannot be replaced. Any correction must be a new version.
 
+Before the active profile exists, maintainers may publish a separately named
+`manager-qualification-v*` prerelease. That binary carries the same pinned
+draft used by source qualification and is limited to local inspection,
+installation, canary, and benchmark work. The CLI refuses Grid enrollment, and
+the unsigned profile cannot advertise worker capabilities even after a passing
+canary. Qualification releases include their own manifest, SHA-256 checksums,
+SPDX SBOM, and GitHub build provenance; they must never be presented as a media
+worker download.
+
 ## License
 
 AGPL-3.0-or-later. See [LICENSE](LICENSE).
