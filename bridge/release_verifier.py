@@ -85,6 +85,22 @@ def verify_release(root: Path) -> None:
     if failed:
         raise ValueError("release profile failed gates: " + ", ".join(failed))
 
+    signing = manifest.get("platform_signing")
+    if not isinstance(signing, dict) or set(signing) != {"windows"}:
+        raise ValueError("release platform-signing state is invalid")
+    windows = signing.get("windows")
+    if (
+        not isinstance(windows, dict)
+        or set(windows) != {"verified", "identity", "subject"}
+        or not isinstance(windows.get("verified"), bool)
+        or not isinstance(windows.get("identity"), str)
+        or (
+            windows.get("subject") is not None
+            and not isinstance(windows["subject"], str)
+        )
+    ):
+        raise ValueError("Windows signing state is invalid")
+
     assets = manifest.get("assets")
     if not isinstance(assets, list) or not all(isinstance(item, dict) for item in assets):
         raise ValueError("release manifest assets must be a list of objects")

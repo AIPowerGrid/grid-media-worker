@@ -36,6 +36,13 @@ def _release_payload(tmp_path: Path) -> Path:
             "recipe_onchain_root": "b" * 64,
             "qualification_manifest_sha256": "c" * 64,
         },
+        "platform_signing": {
+            "windows": {
+                "verified": False,
+                "identity": "unsigned",
+                "subject": None,
+            }
+        },
         "assets": assets,
     }
     (tmp_path / "manager-release.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -144,6 +151,17 @@ def test_manager_release_rejects_invalid_release_identity(tmp_path):
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
 
     with pytest.raises(ValueError, match="invalid manager tag"):
+        verify_release(root)
+
+
+def test_manager_release_rejects_missing_platform_signing_state(tmp_path):
+    root = _release_payload(tmp_path)
+    manifest_path = root / "manager-release.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.pop("platform_signing")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="platform-signing state"):
         verify_release(root)
 
 

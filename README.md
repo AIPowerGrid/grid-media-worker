@@ -332,8 +332,9 @@ qualification tools. A `manager-v*` tag can assemble only a draft release, and
 it fails unless the bundled profile is active, signature-verified,
 RecipeVault-bound, and qualified on the required hardware classes. The draft
 includes `manager-release.json` so `aipowergrid.io/run` can eventually consume
-one reviewed platform/download contract. Public Windows distribution still
-requires code signing before that draft may be promoted. Apple/MPS needs its
+one reviewed platform/download contract. The manifest records Windows signing
+state, and public distribution requires verified Authenticode before that draft
+may be promoted. Apple/MPS needs its
 own measured profile rather than inheriting NVIDIA assumptions.
 GitHub immutable releases are enabled: once a qualified draft is published,
 its tag and assets cannot be replaced. Any correction must be a new version.
