@@ -21,6 +21,8 @@ and the WebSocket worker.
 - `test_profile_release.py` - one-class private pilot and three-class public
   qualification, offline finalization, public RecipeVault-root binding,
   private-key permissions, and self-verifying Ed25519 output.
+- `test_manager_release.py` - exact manager binary/SBOM payload, aggregate
+  checksums, signed public-profile gates, and tamper rejection.
 - `test_hardware_profiles.py` - local detection, privacy-safe summaries, and
   minimum/midrange/datacenter recommendation fixtures.
 - `test_profile_installer.py` - resumable artifact download, constrained source

@@ -60,10 +60,12 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   evidence. `profile_pilot.py` derives a private, one-hardware-class pilot
   draft that remains ineligible for public release. Neither tool is bundled
   into the public manager executable.
-- `manager_entry.py` and `.github/workflows/manager-build.yml` build and smoke-test
-  standalone manager executables. Tagged Linux/Windows builds require an active,
-  signed, RecipeVault-bound profile before they can assemble a checksummed,
-  provenance-attested draft GitHub Release; CI never publishes that draft.
+- `manager_entry.py`, `verify_manager_release.py`, and
+  `.github/workflows/manager-build.yml` build, smoke-test, and verify standalone
+  manager executables. Relevant main-branch changes build on Linux and Windows.
+  Tagged builds require an active, signed, RecipeVault-bound profile before
+  they can assemble a checksummed, SPDX-SBOM-bearing, provenance-attested draft
+  GitHub Release; CI never publishes that draft.
 - `.github/workflows/secret-scan.yml` and `.gitleaks.toml` enforce
   checksum-verified secret and operational-infrastructure scanning.
 
