@@ -68,7 +68,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   unsigned draft cannot enroll with the Grid or advertise capabilities.
   Tagged builds require an active, signed, RecipeVault-bound profile before
   they can assemble a checksummed, SPDX-SBOM-bearing, provenance-attested draft
-  GitHub Release; CI never publishes that draft.
+  GitHub Release. The final manifest records Windows Authenticode state; CI
+  never publishes that draft.
 - `.github/workflows/secret-scan.yml` and `.gitleaks.toml` enforce
   checksum-verified secret and operational-infrastructure scanning.
 - `.github/ISSUE_TEMPLATE/media-manager-qualification.yml` recruits hardware
@@ -130,7 +131,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   against the resulting executable. The spec embeds pinned `uv`; build outputs
   remain ignored except for the reviewed spec itself.
 - A `manager-v*` tag is not public approval. The assembled GitHub Release stays draft
-  until hardware reports, platform signing, and supervised staging are reviewed.
+  until hardware reports, Windows Authenticode, and supervised staging are reviewed.
+  Public download surfaces must fail closed unless the final manifest records
+  a verified Authenticode subject.
 - A `manager-qualification-v*` prerelease is public benchmark tooling, not a
   worker release. Its manifest must bind the draft profile and explicitly deny
   Grid enrollment and capability advertisement.
