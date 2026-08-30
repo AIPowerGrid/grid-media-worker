@@ -359,7 +359,7 @@ jobs:
               --draft \
               --verify-tag \
               --title "Grid Media Manager ${RELEASE_TAG#manager-v}" \
-              --notes "Draft only: publish after hardware qualification, Windows code signing, and supervised staging validation."
+              --notes "Draft only: publish after hardware qualification and supervised staging validation. Linux may be distributed after the shared release gates pass; Windows remains unsupported until manager-release.json records verified Authenticode."
           fi
 
   manager-release-gate:

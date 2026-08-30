@@ -68,8 +68,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   unsigned draft cannot enroll with the Grid or advertise capabilities.
   Tagged builds require an active, signed, RecipeVault-bound profile before
   they can assemble a checksummed, SPDX-SBOM-bearing, provenance-attested draft
-  GitHub Release. The final manifest records Windows Authenticode state; CI
-  never publishes that draft.
+  GitHub Release. The final manifest records Windows Authenticode state so
+  download surfaces can gate platforms independently; CI never publishes that
+  draft.
 - `.github/workflows/secret-scan.yml`, `.gitleaks.toml`, and
   `.gitleaksignore` enforce checksum-verified tracked-tree and complete
   reachable-history scanning. Historical exceptions are exact reviewed
@@ -136,9 +137,10 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   against the resulting executable. The spec embeds pinned `uv`; build outputs
   remain ignored except for the reviewed spec itself.
 - A `manager-v*` tag is not public approval. The assembled GitHub Release stays draft
-  until hardware reports, Windows Authenticode, and supervised staging are reviewed.
-  Public download surfaces must fail closed unless the final manifest records
-  a verified Authenticode subject.
+  until hardware reports, profile and provenance evidence, and supervised staging are
+  reviewed. Linux may be exposed after those shared gates pass. Windows download
+  surfaces must remain closed unless the final manifest records a verified
+  Authenticode subject.
 - A `manager-qualification-v*` prerelease is public benchmark tooling, not a
   worker release. Its manifest must bind the draft profile and explicitly deny
   Grid enrollment and capability advertisement.

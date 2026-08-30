@@ -114,6 +114,8 @@ Before a report can contribute to the release, maintainers must verify that:
 - the final profile is signed offline and the public key is reviewed before it
   is added to the manager bundle.
 
-Only then may a `manager-v*` tag assemble a draft release. Platform signing,
-supervised staging, checksums, SPDX SBOM verification, and provenance review are
-still required before that draft is published.
+Only then may a `manager-v*` tag assemble a draft release. Supervised staging,
+checksums, SPDX SBOM verification, and provenance review are still required
+before that draft is published. Linux availability may open after those shared
+gates pass. Windows remains unavailable until the manifest records verified
+Authenticode.
