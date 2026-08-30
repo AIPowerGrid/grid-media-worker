@@ -7,6 +7,12 @@ hardware class and its recipe commitment is registered in RecipeVault.
 This is release testing, not paid Grid work. It does not create rewards, den,
 stake, or a promise of future earnings.
 
+Current accepted evidence counts are published in
+[`qualification-status.json`](qualification-status.json). That status file is
+bound to the exact draft profile hash and is the machine-readable source for
+public recruitment surfaces. A maintainer updates it only after accepting a
+complete public/private evidence pair.
+
 ## Hardware Needed
 
 The manager derives the class from the signed profile and the selected GPU. For
