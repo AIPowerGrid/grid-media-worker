@@ -46,6 +46,22 @@ comfy-bridge
 The bridge advertises only models it can resolve and serve. `GRID_MODEL` can
 restrict that list, but it cannot make a missing workflow or checkpoint valid.
 
+## Help Validate the Grid
+
+Already run persistent infrastructure? AI Power Grid is recruiting two more
+unrelated Linux/systemd or persistent Docker operators for the initial
+validator cohort. The validator is CPU-only: it does not require a GPU, stake,
+or a worker, and preview validators have no routing, reward, strike, or slashing
+authority.
+
+Each candidate must complete a 72-hour evidence window before it can qualify.
+Multiple nodes controlled by the same person or organization count as one
+independent operator, including when that operator also runs Grid workers.
+Start at [aipowergrid.io/validate](https://aipowergrid.io/validate), then post
+only your public `val_*` status ID in the
+[qualification cohort issue](https://github.com/AIPowerGrid/grid-validator/issues/5).
+Never post an API key or private key.
+
 ## ACE-Step Worker Profile V1
 
 The standalone `grid-media-manager` detects hardware locally, installs exact
