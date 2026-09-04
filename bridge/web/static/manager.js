@@ -76,8 +76,50 @@ function render(data) {
   }
 
   renderCapacity(data.capacity || {});
+  renderGrid(data.grid);
   renderProcess(data.process || {});
   configureActions(data);
+}
+
+function renderGrid(grid) {
+  if (!grid || !grid.available) {
+    badge("grid-badge", grid ? "Unavailable" : "Not connected", grid ? "warn" : "neutral");
+    text("grid-capabilities", "-");
+    text("grid-jobs", "-");
+    text("grid-den", "-");
+    text("grid-payout", "-");
+    text("grid-last-paid", "-");
+    return;
+  }
+  const worker = grid.worker || {};
+  const payout = grid.payout || {};
+  const online = worker.online;
+  badge("grid-badge", online === true ? "Online" : online === false ? "Offline" : "Unavailable", online === true ? "good" : online === false ? "warn" : "neutral");
+  const advertised = [...(worker.job_types || []), ...(worker.models || [])];
+  text("grid-capabilities", advertised.length ? advertised.join(", ") : "None");
+  text("grid-jobs", Number(worker.jobs_completed || 0).toLocaleString());
+  text("grid-den", Number(worker.den_recorded || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }));
+  text("grid-payout", payoutLabel(payout));
+  text("grid-last-paid", localDate(payout.last_paid_at));
+}
+
+function payoutLabel(payout) {
+  if (!payout.wallet_configured) return "Wallet required";
+  return {
+    not_started: "No payout yet",
+    accrued: "Accrued",
+    pending: "Pending",
+    sent: "Sent",
+    confirmed: "Confirmed",
+    failed: "Needs review",
+    manual_review: "Needs review",
+  }[payout.latest_status] || "Unavailable";
+}
+
+function localDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "-" : date.toLocaleString();
 }
 
 function renderCapacity(capacity) {
@@ -233,4 +275,4 @@ el("capacity-form").addEventListener("submit", async (event) => {
 });
 
 poll();
-setInterval(poll, 2000);
+setInterval(poll, 5000);

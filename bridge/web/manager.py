@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import os
 import re
 import secrets
@@ -21,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import httpx
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -29,7 +31,11 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from ..capacity import effective_concurrency, load_schedule, validate_schedule
-from ..enrollment import EnrollmentClientError, load_worker_credentials
+from ..enrollment import (
+    EnrollmentClientError,
+    grid_api_base_url,
+    load_worker_credentials,
+)
 from ..identity import (
     load_delegation_certificate,
     load_worker_key,
@@ -256,6 +262,11 @@ def create_manager_app(
     )
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
+    grid_cache: dict[str, Any] = {
+        "credential_stamp": None,
+        "expires_at": 0.0,
+        "value": None,
+    }
 
     @app.middleware("http")
     async def local_session_guard(request: Request, call_next):
@@ -306,7 +317,26 @@ def create_manager_app(
 
     @app.get("/api/manager/status")
     async def manager_status():
-        return _manager_status(config, controller)
+        result = _manager_status(config, controller)
+        credential_stamp = (
+            config.credentials.stat().st_mtime_ns
+            if config.credentials.exists()
+            else None
+        )
+        now = time.monotonic()
+        if (
+            credential_stamp != grid_cache["credential_stamp"]
+            or now >= grid_cache["expires_at"]
+        ):
+            grid_cache.update(
+                {
+                    "credential_stamp": credential_stamp,
+                    "expires_at": now + 30.0,
+                    "value": await _worker_grid_status(config),
+                }
+            )
+        result["grid"] = grid_cache["value"]
+        return result
 
     @app.post("/api/manager/action")
     async def manager_action(request: Request):
@@ -483,6 +513,83 @@ def _manager_status(
         and result["identity"]["connected"]
     )
     return result
+
+
+async def _worker_grid_status(
+    config: ManagerWebConfig,
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any] | None:
+    """Read the exact bound rig's redacted operational status from Core."""
+    if not config.credentials.exists():
+        return None
+    try:
+        credentials = load_worker_credentials(config.credentials)
+        base = grid_api_base_url(str(credentials["grid_api_url"]))
+        api = base if base.endswith("/v1") else f"{base}/v1"
+        api_key = str(credentials["api_key"])
+        worker_name = str(credentials["worker_name"])
+    except (KeyError, OSError, ValueError, EnrollmentClientError):
+        return {"available": False}
+
+    owns_client = client is None
+    http = client or httpx.AsyncClient(timeout=10.0)
+    try:
+        response = await http.get(
+            f"{api}/workers/self",
+            headers={"apikey": api_key},
+        )
+        if response.status_code != 200:
+            return {"available": False}
+        data = response.json()
+    except (httpx.HTTPError, ValueError):
+        return {"available": False}
+    finally:
+        if owns_client:
+            await http.aclose()
+
+    worker = data.get("worker") if isinstance(data, dict) else None
+    payout = data.get("payout") if isinstance(data, dict) else None
+    if (
+        not isinstance(data, dict)
+        or data.get("schema") != "aipg.worker.self.v1"
+        or not isinstance(worker, dict)
+        or worker.get("name") != worker_name
+        or not isinstance(payout, dict)
+    ):
+        return {"available": False}
+    try:
+        jobs_completed = max(0, int(worker.get("jobs_completed") or 0))
+        den_recorded = max(0.0, float(worker.get("den_recorded") or 0.0))
+    except (TypeError, ValueError):
+        return {"available": False}
+    if not math.isfinite(den_recorded):
+        return {"available": False}
+    return {
+        "available": True,
+        "worker": {
+            "online": worker.get("online") if isinstance(worker.get("online"), bool) else None,
+            "maintenance": bool(worker.get("maintenance")),
+            "models": [
+                item for item in (worker.get("models") or [])
+                if isinstance(item, str)
+            ][:32],
+            "job_types": [
+                item for item in (worker.get("job_types") or [])
+                if isinstance(item, str)
+            ][:8],
+            "jobs_completed": jobs_completed,
+            "den_recorded": den_recorded,
+        },
+        "payout": {
+            "scope": "account",
+            "wallet_configured": bool(payout.get("wallet_configured")),
+            "latest_status": str(payout.get("latest_status") or ""),
+            "last_paid_at": payout.get("last_paid_at")
+            if isinstance(payout.get("last_paid_at"), str)
+            else None,
+        },
+    }
 
 
 def _capacity_path(config: ManagerWebConfig) -> Path:
