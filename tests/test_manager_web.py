@@ -5,6 +5,8 @@ import os
 from pathlib import Path
 from unittest.mock import AsyncMock
 
+import httpx
+import pytest
 from fastapi.testclient import TestClient
 
 from bridge.profiles.hardware import AcceleratorInfo, HardwareSnapshot
@@ -129,6 +131,9 @@ def test_manager_capacity_is_bounded_persistent_and_watched(tmp_path, monkeypatc
     page = client.get("/")
     assert 'id="capacity-form"' in page.text
     assert "Maximum simultaneous jobs" in page.text
+    assert 'id="grid-badge"' in page.text
+    assert "Jobs completed" in page.text
+    assert "Den recorded" in page.text
 
     wrong_origin = client.post(
         "/api/manager/capacity",
@@ -192,6 +197,25 @@ def test_manager_capacity_is_bounded_persistent_and_watched(tmp_path, monkeypatc
     assert always.json()["capacity"]["accepting_jobs"] is True
 
 
+def test_manager_caches_remote_grid_status_until_credentials_change(
+    tmp_path, monkeypatch,
+):
+    remote_status = AsyncMock(return_value={"available": True})
+    monkeypatch.setattr(manager, "_worker_grid_status", remote_status)
+    client, config, _controller, token = _client(tmp_path, monkeypatch)
+    config.credentials.parent.mkdir(parents=True, exist_ok=True)
+    config.credentials.write_text("first", encoding="utf-8")
+    client.get(f"/bootstrap?token={token}")
+
+    assert client.get("/api/manager/status").json()["grid"] == {"available": True}
+    assert client.get("/api/manager/status").json()["grid"] == {"available": True}
+    assert remote_status.await_count == 1
+
+    config.credentials.write_text("second credential value", encoding="utf-8")
+    assert client.get("/api/manager/status").json()["grid"] == {"available": True}
+    assert remote_status.await_count == 2
+
+
 def test_status_keeps_worker_api_key_private(tmp_path, monkeypatch):
     client, _config_value, _controller, token = _client(tmp_path, monkeypatch)
     client.get(f"/bootstrap?token={token}")
@@ -238,6 +262,79 @@ def test_status_keeps_worker_api_key_private(tmp_path, monkeypatch):
     assert "grid_super_secret_value" not in response.text
     assert payload["hardware"]["gpu"]["vram_mb"] == 24576
     assert payload["hardware"]["gpu"]["name"] == "NVIDIA GeForce RTX 3090"
+
+
+@pytest.mark.asyncio
+async def test_grid_status_uses_bound_key_and_keeps_account_details_private(
+    tmp_path, monkeypatch,
+):
+    config = _config(tmp_path)
+    config.credentials.parent.mkdir(parents=True)
+    config.credentials.write_text("placeholder", encoding="utf-8")
+    monkeypatch.setattr(
+        manager,
+        "load_worker_credentials",
+        lambda *_a, **_k: {
+            "grid_api_url": "https://api.aipowergrid.io",
+            "api_key": "grid_super_secret_value",
+            "worker_name": "audio-rig",
+        },
+    )
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url == "https://api.aipowergrid.io/v1/workers/self"
+        assert request.headers["apikey"] == "grid_super_secret_value"
+        return httpx.Response(
+            200,
+            json={
+                "schema": "aipg.worker.self.v1",
+                "worker": {
+                    "name": "audio-rig",
+                    "online": True,
+                    "maintenance": False,
+                    "models": ["ace-step-1.5-turbo"],
+                    "job_types": ["audio"],
+                    "jobs_completed": 12,
+                    "den_recorded": 34.5,
+                    "account_id": "private-account",
+                },
+                "payout": {
+                    "scope": "account",
+                    "wallet_configured": True,
+                    "latest_status": "confirmed",
+                    "last_paid_at": "2026-09-04T12:00:00+00:00",
+                    "amount": 999,
+                    "address": "0x" + "1" * 40,
+                    "tx_hash": "0x" + "2" * 64,
+                },
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        result = await manager._worker_grid_status(config, client=client)
+
+    assert result == {
+        "available": True,
+        "worker": {
+            "online": True,
+            "maintenance": False,
+            "models": ["ace-step-1.5-turbo"],
+            "job_types": ["audio"],
+            "jobs_completed": 12,
+            "den_recorded": 34.5,
+        },
+        "payout": {
+            "scope": "account",
+            "wallet_configured": True,
+            "latest_status": "confirmed",
+            "last_paid_at": "2026-09-04T12:00:00+00:00",
+        },
+    }
+    rendered = json.dumps(result)
+    assert "grid_super_secret_value" not in rendered
+    assert "private-account" not in rendered
+    assert "0x1111" not in rendered
+    assert "0x2222" not in rendered
 
 
 def test_process_commands_are_shell_free_and_fixed_by_action(tmp_path):

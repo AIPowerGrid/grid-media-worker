@@ -55,6 +55,15 @@ canary, wallet-pairing, and worker process state.
   It writes a local `0600` capacity file that the serving child watches. A
   pause must drain an active render before disconnecting; never implement it by
   terminating the serving process.
+- The standalone manager reads Core's `GET /v1/workers/self` only with its
+  locally stored rig credential and renders the exact bound worker's
+  online/jobs/den state plus a redacted account-level payout lifecycle. It must
+  never return
+  the API key, broaden that key to account reads, enumerate sibling workers, or
+  expose payout addresses, balances, amounts, or transaction hashes.
+  Cache that remote status for 30 seconds, invalidating immediately when the
+  local credential file changes; the five-second local process poll must not
+  become five-second Core database traffic.
 - Browser dependencies must be exact-versioned and integrity-pinned; do not
   restore floating CDN ranges on a page that handles worker credentials.
 - Manager actions execute the same reviewed CLI commands as the terminal path;
