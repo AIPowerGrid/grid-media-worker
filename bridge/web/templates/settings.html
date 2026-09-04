@@ -38,10 +38,6 @@
         <input type="text" x-model="form.WORKFLOW_FILE" placeholder="e.g. flux2_klein_4b_api.json">
       </label>
       <label>
-        Threads
-        <input type="number" x-model="form.GRID_THREADS" min="1" max="16">
-      </label>
-      <label>
         Batch Size
         <input type="number" x-model="form.GRID_BATCH_SIZE" min="1" max="16">
       </label>
@@ -77,7 +73,6 @@ function settingsForm() {
       GRID_MODEL: {{ settings.GRID_MODEL | tojson }},
       WORKFLOW_FILE: {{ settings.WORKFLOW_FILE | tojson }},
       GRID_NSFW: {{ settings.GRID_NSFW | tojson }},
-      GRID_THREADS: {{ settings.GRID_THREADS | tojson }},
       GRID_MAX_PIXELS: {{ settings.GRID_MAX_PIXELS | tojson }},
       GRID_BATCH_SIZE: {{ settings.GRID_BATCH_SIZE | tojson }},
     },

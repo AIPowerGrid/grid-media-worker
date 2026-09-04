@@ -24,7 +24,8 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   both graph shapes and the `_bridge` block.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
 - **Detection/UI:** `comfyui_detect.py` (find/install ComfyUI for the wizard); `web/` — control
-  UI, owned in its own AGENTS.md.
+  UI and local capability inventory, owned in its own AGENTS.md. Inventory is descriptive;
+  runtime gates remain authoritative for qualification and advertisement.
 - **Managed profiles:** `profiles/` - signed declarative manifests, artifact
   commitments, local hardware detection, and recommendation. Owned in its own
   AGENTS.md.

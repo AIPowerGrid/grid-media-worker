@@ -101,8 +101,10 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   dispatch mode — "add a recipe in core → it runs here" — preferred over local model→workflow
   mapping.
 - **Advertise only what you can serve:** a model is advertised only when its workflow file is
-  resolvable. With `WORKFLOW_FILE` set, models are derived from the checkpoint files in those
-  graphs via the local model reference; unresolved files are not advertised.
+  resolvable and every referenced weight is present in ComfyUI. With `WORKFLOW_FILE` set,
+  models are derived from the checkpoint files in those graphs via the local model reference;
+  unresolved files are not advertised. The loopback setup inventory reports compatibility but
+  never promotes it to qualification or advertisement.
 - **No standing storage creds on the worker.** Outputs upload only to
   Grid-issued presigned URLs from the job message.
 - **All config is env-driven** through `bridge/config.py` (`Settings`); the UI persists changes

@@ -304,6 +304,43 @@ input::placeholder { color: var(--text-dim); opacity: 0.6; }
 .detect-detail { font-size: 0.82rem; color: var(--text-dim); margin-top: 0.15rem; font-family: monospace; }
 .detect-methods { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.4rem; }
 
+.capability-box {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 1rem;
+  margin-bottom: 1.25rem;
+}
+.capability-heading,
+.capability-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.capability-states {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 0.8rem;
+  margin: 0.9rem 0;
+  color: var(--text-dim);
+  font-size: 0.72rem;
+}
+.capability-states b { color: var(--text-label); }
+.capability-list { display: grid; gap: 0.45rem; margin-bottom: 0.75rem; }
+.capability-row { padding: 0.55rem 0; border-top: 1px solid var(--border); }
+.capability-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.35rem; }
+.tag-success { border-color: var(--green); color: var(--green); background: var(--green-dim); }
+.tag-advertised { border-color: var(--accent); color: var(--text); background: var(--accent-glow); }
+.compatible-choices {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.65rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-input);
+}
+
 .status-icon {
   width: 28px;
   height: 28px;
@@ -326,6 +363,10 @@ input::placeholder { color: var(--text-dim); opacity: 0.6; }
   border-radius: 4px;
   font-size: 0.72rem;
   color: var(--text-dim);
+}
+
+@media (max-width: 520px) {
+  .capability-states { grid-template-columns: 1fr; }
 }
 
 /* Install section */

@@ -450,6 +450,37 @@ class ModelMapper:
                 print(f"Not advertising '{m}': {reason}")
         return servable
 
+    def capability_report(self) -> List[dict]:
+        """Describe each unique bundled workflow without advertising it.
+
+        This is used by the loopback setup UI. It deliberately reports local
+        compatibility only: qualification and Grid advertisement happen later.
+        """
+        preferred_names = {
+            "Dreamshaper.json": "dreamshaper_8",
+            "turbovision.json": "sdxl-turbo",
+            "image_z_image_turbo.json": "z-image-turbo",
+            "wan2_2_t2v_14b.json": "wan2.2-t2v-a14b",
+            "flux2_klein_4b_api.json": "FLUX.2 Klein 4B FP8",
+        }
+        workflows: Dict[str, List[str]] = {}
+        for model_name, workflow in self.workflow_map.items():
+            workflows.setdefault(workflow, []).append(model_name)
+
+        report = []
+        for workflow, aliases in workflows.items():
+            model_name = preferred_names.get(workflow, aliases[0])
+            ok, reason = self.is_servable(model_name)
+            report.append(
+                {
+                    "model": model_name,
+                    "workflow": workflow,
+                    "compatible": ok,
+                    "reason": reason,
+                }
+            )
+        return sorted(report, key=lambda item: item["model"].casefold())
+
 
 model_mapper = ModelMapper()
 

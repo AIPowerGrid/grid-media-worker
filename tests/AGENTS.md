@@ -12,8 +12,8 @@ and the WebSocket worker.
   startup-failure supervision against the installed FastAPI/Starlette API.
 - `test_ws_worker.py` - WebSocket registration, dispatch, result, failure
   behavior, and runtime-health capability withdrawal.
-- `test_model_mapper.py` - model-reference resolution and retired-capability
-  advertisement guards.
+- `test_model_mapper.py` - model-reference resolution, capability inventory,
+  and retired-capability advertisement guards.
 - `test_worker_identity.py` - worker-key custody, payout-wallet delegation,
   fresh registration proofs, and job-receipt signing.
 - `test_worker_profiles.py` - schema/signature fail-closed behavior and pinned

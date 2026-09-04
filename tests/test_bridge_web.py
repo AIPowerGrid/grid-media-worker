@@ -11,6 +11,7 @@ from bridge import comfyui_detect
 from bridge import cli as bridge_cli
 from bridge.config import Settings
 from bridge import ws_worker
+from bridge import model_mapper
 
 
 LOCAL_ORIGIN = "http://127.0.0.1:7860"
@@ -95,6 +96,73 @@ def test_bridge_requires_json_for_settings():
     )
     assert response.status_code == 415
     assert response.json() == {"detail": "JSON required"}
+
+
+def test_setup_inventory_reports_compatibility_without_advertising(monkeypatch):
+    async def fake_initialize(self, _url):
+        self.available_files = {"weights.safetensors"}
+
+    monkeypatch.setattr(model_mapper.ModelMapper, "initialize", fake_initialize)
+    monkeypatch.setattr(
+        model_mapper.ModelMapper,
+        "capability_report",
+        lambda _self: [
+            {
+                "model": "example-model",
+                "workflow": "example.json",
+                "compatible": True,
+                "reason": "ok",
+            }
+        ],
+    )
+    monkeypatch.setitem(web_app.worker_state, "bridge", None)
+    client = _client()
+
+    response = client.post(
+        "/api/setup/inventory",
+        headers={"Origin": LOCAL_ORIGIN},
+        json={"url": "http://127.0.0.1:8188"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "detected": True,
+        "weight_count": 1,
+        "capabilities": [
+            {
+                "model": "example-model",
+                "workflow": "example.json",
+                "compatible": True,
+                "reason": "ok",
+            }
+        ],
+        "advertised": [],
+    }
+
+
+def test_setup_inventory_rejects_extra_fields():
+    response = _client().post(
+        "/api/setup/inventory",
+        headers={"Origin": LOCAL_ORIGIN},
+        json={"url": "http://127.0.0.1:8188", "command": "bad"},
+    )
+    assert response.status_code == 400
+
+
+def test_media_settings_do_not_expose_unused_threads_control(monkeypatch):
+    monkeypatch.setitem(web_app.worker_state, "setup_complete", True)
+    response = _client().get("/settings")
+    assert response.status_code == 200
+    assert "GRID_THREADS" not in response.text
+    assert ">Threads<" not in response.text
+
+
+def test_setup_exposes_capability_states_and_operator_selection():
+    response = _client().get("/setup")
+    assert response.status_code == 200
+    for state in ("Detected", "Compatible", "Qualified", "Advertised"):
+        assert state in response.text
+    assert "toggleModel(capability.model)" in response.text
 
 
 def test_browser_cannot_select_comfy_executable(monkeypatch):
