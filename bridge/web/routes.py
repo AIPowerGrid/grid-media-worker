@@ -12,6 +12,7 @@ from ..comfyui_detect import (
     install_comfyui_via_cli,
     validated_comfyui_url,
 )
+from ..model_mapper import ModelMapper
 from .app import app, templates, worker_state, start_worker, stop_worker
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,6 @@ _PERSISTED_SETTINGS = frozenset(
         "GRID_MAX_PIXELS",
         "GRID_MODEL",
         "GRID_NSFW",
-        "GRID_THREADS",
         "GRID_WORKER_NAME",
         "WORKFLOW_FILE",
     }
@@ -34,6 +34,7 @@ _PERSISTED_SETTINGS = frozenset(
 _JSON_POST_PATHS = frozenset(
     {
         "/api/setup/check-url",
+        "/api/setup/inventory",
         "/api/setup/install-comfyui",
         "/api/setup/complete",
         "/api/settings",
@@ -121,6 +122,31 @@ async def api_check_url(request: Request):
     return {"url": url, "reachable": reachable}
 
 
+@app.post("/api/setup/inventory")
+async def api_setup_inventory(request: Request):
+    """Inspect a local ComfyUI instance without changing worker state."""
+    body = await request.json()
+    if not isinstance(body, dict) or set(body) != {"url"}:
+        return JSONResponse({"detail": "Invalid inventory request"}, status_code=400)
+    try:
+        url = validated_comfyui_url(str(body["url"]))
+    except (TypeError, ValueError):
+        return JSONResponse({"detail": "Invalid ComfyUI URL"}, status_code=400)
+
+    mapper = ModelMapper()
+    await mapper.initialize(url)
+    advertised = []
+    bridge = worker_state.get("bridge")
+    if bridge is not None:
+        advertised = list(getattr(bridge, "models", []) or [])
+    return {
+        "detected": bool(mapper.available_files),
+        "weight_count": len(mapper.available_files),
+        "capabilities": mapper.capability_report(),
+        "advertised": advertised,
+    }
+
+
 @app.post("/api/setup/install-comfyui")
 async def api_install_comfyui(request: Request):
     """Install ComfyUI via comfy-cli."""
@@ -186,7 +212,6 @@ async def api_status():
             "comfyui_url": Settings.COMFYUI_URL,
             "models": Settings.GRID_MODELS,
             "nsfw": Settings.NSFW,
-            "threads": Settings.THREADS,
             "max_pixels": Settings.MAX_PIXELS,
         },
     }
@@ -208,7 +233,6 @@ async def settings_page(request: Request):
                 "GRID_MODEL": Settings._GRID_MODELS_RAW,
                 "WORKFLOW_FILE": Settings.WORKFLOW_FILE or "",
                 "GRID_NSFW": str(Settings.NSFW).lower(),
-                "GRID_THREADS": str(Settings.THREADS),
                 "GRID_MAX_PIXELS": str(Settings.MAX_PIXELS),
                 "GRID_BATCH_SIZE": str(Settings.BATCH_SIZE),
             },
@@ -287,7 +311,6 @@ def _validated_settings_form(value: object) -> dict[str, str]:
     if "GRID_NSFW" in form and form["GRID_NSFW"].lower() not in {"true", "false"}:
         raise ValueError("GRID_NSFW must be true or false")
     for key, lower, upper in (
-        ("GRID_THREADS", 1, 16),
         ("GRID_BATCH_SIZE", 1, 16),
         ("GRID_MAX_PIXELS", 1, 134_217_728),
     ):
@@ -317,8 +340,6 @@ def _reload_settings(form: dict):
         ]
     if "GRID_NSFW" in form:
         Settings.NSFW = form["GRID_NSFW"].lower() == "true"
-    if "GRID_THREADS" in form:
-        Settings.THREADS = int(form["GRID_THREADS"])
     if "GRID_MAX_PIXELS" in form:
         Settings.MAX_PIXELS = int(form["GRID_MAX_PIXELS"])
     if "WORKFLOW_FILE" in form:

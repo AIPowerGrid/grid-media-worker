@@ -32,3 +32,35 @@ def test_stale_reference_cannot_restore_retired_krea(tmp_path, monkeypatch):
     mapper._build_workflow_map_from_env()
 
     assert "flux.1-krea-dev" not in mapper.workflow_map
+
+
+def test_capability_report_deduplicates_aliases_and_keeps_state_local(monkeypatch):
+    mapper = ModelMapper()
+    mapper.workflow_map = {
+        "flux2-klein": "flux2_klein_4b_api.json",
+        "FLUX.2 Klein 4B FP8": "flux2_klein_4b_api.json",
+        "z-image-turbo": "image_z_image_turbo.json",
+    }
+    monkeypatch.setattr(
+        mapper,
+        "is_servable",
+        lambda model: (
+            model == "FLUX.2 Klein 4B FP8",
+            "ok" if model == "FLUX.2 Klein 4B FP8" else "missing",
+        ),
+    )
+
+    assert mapper.capability_report() == [
+        {
+            "model": "FLUX.2 Klein 4B FP8",
+            "workflow": "flux2_klein_4b_api.json",
+            "compatible": True,
+            "reason": "ok",
+        },
+        {
+            "model": "z-image-turbo",
+            "workflow": "image_z_image_turbo.json",
+            "compatible": False,
+            "reason": "missing",
+        },
+    ]

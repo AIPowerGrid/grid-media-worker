@@ -86,6 +86,43 @@
       <div class="field-hint" x-show="url_status === 'fail'" style="color: var(--red);">Not reachable — is ComfyUI running?</div>
     </label>
 
+    <div class="capability-box" x-show="url_status === 'ok'">
+      <div class="capability-heading">
+        <div>
+          <strong>Local capability inventory</strong>
+          <div class="field-hint" x-show="inventory.detected" x-text="`${inventory.weight_count} model weight files detected`"></div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline" @click="inspectCapabilities()" :disabled="inspecting">
+          <span x-show="!inspecting">Refresh</span>
+          <span x-show="inspecting" class="spinner-sm"></span>
+        </button>
+      </div>
+      <div class="capability-states">
+        <span><b>Detected</b> <span x-text="inventory.weight_count"></span> weight files</span>
+        <span><b>Compatible</b> <span x-text="compatibleCapabilities().length"></span> Grid workflows</span>
+        <span><b>Qualified</b> managed-profile canary only</span>
+        <span><b>Advertised</b> <span x-text="inventory.advertised.length"></span> active models</span>
+      </div>
+      <template x-if="!inspecting && inventory.capabilities.length === 0">
+        <p class="field-hint">No bundled Grid workflow matches the weights reported by this ComfyUI instance.</p>
+      </template>
+      <div class="capability-list">
+        <template x-for="capability in inventory.capabilities" :key="capability.workflow">
+          <div class="capability-row">
+            <div>
+              <strong x-text="capability.model"></strong>
+              <div class="field-hint" x-text="capability.workflow"></div>
+            </div>
+            <div class="capability-tags">
+              <span class="tag" :class="capability.compatible ? 'tag-success' : ''" x-text="capability.compatible ? 'Compatible' : 'Not ready'"></span>
+              <span class="tag tag-advertised" x-show="isAdvertised(capability.model)">Advertised</span>
+            </div>
+          </div>
+        </template>
+      </div>
+      <p class="field-hint">Compatibility does not enroll or advertise anything. The worker performs its final gate when it starts.</p>
+    </div>
+
     <!-- Base path -->
     <label class="field">
       <span class="field-label">ComfyUI Path <span class="optional">(for model downloads)</span></span>
@@ -152,8 +189,17 @@
     </label>
 
     <label class="field">
-      <span class="field-label">Models <span class="optional">(comma-separated, leave blank for auto-detect)</span></span>
+      <span class="field-label">Models to advertise <span class="optional">(comma-separated, leave blank for compatible models)</span></span>
       <input type="text" x-model="config.models" placeholder="e.g. FLUX.2 Klein 4B FP8">
+      <span class="field-hint">Only models that pass the local workflow and weight gate can be advertised.</span>
+      <div class="compatible-choices" x-show="compatibleCapabilities().length">
+        <template x-for="capability in compatibleCapabilities()" :key="capability.model">
+          <label class="checkbox-label">
+            <input type="checkbox" :checked="selectedModels().includes(capability.model)" @change="toggleModel(capability.model)">
+            <span x-text="capability.model"></span>
+          </label>
+        </template>
+      </div>
     </label>
 
     <label class="field">
@@ -238,6 +284,8 @@ function setupWizard() {
     },
     checking_url: false,
     url_status: null,
+    inspecting: false,
+    inventory: { detected: false, weight_count: 0, capabilities: [], advertised: [] },
     // ComfyUI install
     installing_comfyui: false,
     comfyui_install_error: null,
@@ -276,9 +324,44 @@ function setupWizard() {
         });
         const d = await r.json();
         this.url_status = d.reachable ? 'ok' : 'fail';
+        if (d.reachable) await this.inspectCapabilities();
       } finally {
         this.checking_url = false;
       }
+    },
+
+    async inspectCapabilities() {
+      this.inspecting = true;
+      try {
+        const r = await fetch('/api/setup/inventory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: this.config.comfyui_url }),
+        });
+        if (r.ok) this.inventory = await r.json();
+      } finally {
+        this.inspecting = false;
+      }
+    },
+
+    compatibleCapabilities() {
+      return this.inventory.capabilities.filter(capability => capability.compatible);
+    },
+
+    selectedModels() {
+      return this.config.models.split(',').map(model => model.trim()).filter(Boolean);
+    },
+
+    toggleModel(model) {
+      const selected = this.selectedModels();
+      const next = selected.includes(model)
+        ? selected.filter(value => value !== model)
+        : [...selected, model];
+      this.config.models = next.join(', ');
+    },
+
+    isAdvertised(model) {
+      return this.inventory.advertised.includes(model);
     },
 
     async installComfyUI() {

@@ -43,6 +43,11 @@ canary, wallet-pairing, and worker process state.
   the browser never invokes pip or a remote shell installer.
 - Render persisted values into JavaScript with Jinja `tojson`; never interpolate
   environment or exception text into executable script literals.
+- The ComfyUI inventory is descriptive only. Keep the state progression
+  explicit: detected, compatible, qualified, then advertised. Never label a
+  local workflow as qualified or advertised before its runtime gate passes.
+- Do not expose `GRID_THREADS` in the UI unless media dispatch actually becomes
+  concurrent. The current ComfyUI worker handles jobs serially.
 - Browser dependencies must be exact-versioned and integrity-pinned; do not
   restore floating CDN ranges on a page that handles worker credentials.
 - Manager actions execute the same reviewed CLI commands as the terminal path;
