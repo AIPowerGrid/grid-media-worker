@@ -134,6 +134,8 @@ def test_manager_capacity_is_bounded_persistent_and_watched(tmp_path, monkeypatc
     assert 'id="grid-badge"' in page.text
     assert "Jobs completed" in page.text
     assert "Den recorded" in page.text
+    assert 'id="grid-canary-action"' in page.text
+    assert "Run Grid test" in page.text
 
     wrong_origin = client.post(
         "/api/manager/capacity",
@@ -335,6 +337,155 @@ async def test_grid_status_uses_bound_key_and_keeps_account_details_private(
     assert "private-account" not in rendered
     assert "0x1111" not in rendered
     assert "0x2222" not in rendered
+
+
+@pytest.mark.asyncio
+async def test_grid_canary_uses_bound_key_and_returns_only_verified_summary(
+    tmp_path, monkeypatch,
+):
+    config = _config(tmp_path)
+    config.credentials.parent.mkdir(parents=True)
+    config.credentials.write_text("placeholder", encoding="utf-8")
+    monkeypatch.setattr(
+        manager,
+        "load_worker_credentials",
+        lambda *_a, **_k: {
+            "grid_api_url": "https://api.aipowergrid.io",
+            "api_key": "grid_super_secret_value",
+            "worker_name": "audio-rig",
+        },
+    )
+
+    def respond(request: httpx.Request) -> httpx.Response:
+        assert request.url == "https://api.aipowergrid.io/v1/workers/self/canary"
+        assert request.headers["apikey"] == "grid_super_secret_value"
+        assert request.content == b"{}"
+        return httpx.Response(
+            200,
+            json={
+                "schema": "aipg.worker.canary.v1",
+                "status": "passed",
+                "worker_name": "audio-rig",
+                "model": "ace-step-1.5-turbo",
+                "modality": "audio",
+                "latency_ms": 1234,
+                "reason": "verified_media_output",
+                "proof_scope": "hard_targeted_connectivity_and_media_output",
+                "quality_claim": "none",
+                "economic_effect": "none",
+                "private_account": "must-not-pass-through",
+                "output_sha256": "a" * 64,
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
+        result = await manager._worker_grid_canary(config, client=client)
+
+    assert result == {
+        "status": "passed",
+        "worker_name": "audio-rig",
+        "model": "ace-step-1.5-turbo",
+        "modality": "audio",
+        "latency_ms": 1234,
+        "reason": "verified_media_output",
+        "proof_scope": "hard_targeted_connectivity_and_media_output",
+        "quality_claim": "none",
+        "economic_effect": "none",
+    }
+    assert "grid_super_secret_value" not in json.dumps(result)
+    assert "must-not-pass-through" not in json.dumps(result)
+    assert "output_sha256" not in result
+
+
+@pytest.mark.asyncio
+async def test_grid_canary_rejects_unbound_or_economic_result(tmp_path, monkeypatch):
+    config = _config(tmp_path)
+    config.credentials.parent.mkdir(parents=True)
+    config.credentials.write_text("placeholder", encoding="utf-8")
+    monkeypatch.setattr(
+        manager,
+        "load_worker_credentials",
+        lambda *_a, **_k: {
+            "grid_api_url": "https://api.aipowergrid.io",
+            "api_key": "grid_super_secret_value",
+            "worker_name": "audio-rig",
+        },
+    )
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda _request: httpx.Response(
+                200,
+                json={
+                    "schema": "aipg.worker.canary.v1",
+                    "status": "passed",
+                    "worker_name": "other-rig",
+                    "model": "ace-step-1.5-turbo",
+                    "modality": "audio",
+                    "latency_ms": 100,
+                    "reason": "verified_media_output",
+                    "proof_scope": "hard_targeted_connectivity_and_media_output",
+                    "quality_claim": "none",
+                    "economic_effect": "paid",
+                },
+            )
+        )
+    ) as client:
+        with pytest.raises(manager.GridCanaryError) as caught:
+            await manager._worker_grid_canary(config, client=client)
+
+    assert caught.value.status_code == 502
+    assert caught.value.detail == "Grid returned an invalid canary result."
+
+
+def test_grid_canary_route_is_local_and_invalidates_on_credential_change(
+    tmp_path, monkeypatch,
+):
+    canary = {
+        "status": "passed",
+        "worker_name": "audio-rig",
+        "model": "ace-step-1.5-turbo",
+        "modality": "audio",
+        "latency_ms": 1234,
+        "reason": "verified_media_output",
+        "proof_scope": "hard_targeted_connectivity_and_media_output",
+        "quality_claim": "none",
+        "economic_effect": "none",
+    }
+    remote_canary = AsyncMock(return_value=canary)
+    remote_status = AsyncMock(return_value={"available": True})
+    monkeypatch.setattr(manager, "_worker_grid_canary", remote_canary)
+    monkeypatch.setattr(manager, "_worker_grid_status", remote_status)
+    client, config, _controller, token = _client(tmp_path, monkeypatch)
+    config.credentials.parent.mkdir(parents=True, exist_ok=True)
+    config.credentials.write_text("first", encoding="utf-8")
+    client.get(f"/bootstrap?token={token}")
+
+    denied = client.post(
+        "/api/manager/grid-canary",
+        headers={"Origin": "https://attacker.example"},
+        json={},
+    )
+    assert denied.status_code == 403
+    parameterized = client.post(
+        "/api/manager/grid-canary",
+        headers={"Origin": config.origin},
+        json={"model": "attacker-selected"},
+    )
+    assert parameterized.status_code == 400
+
+    accepted = client.post(
+        "/api/manager/grid-canary",
+        headers={"Origin": config.origin},
+        json={},
+    )
+    assert accepted.status_code == 200
+    assert accepted.json() == {"ok": True, "canary": canary}
+    assert client.get("/api/manager/status").json()["grid_canary"] == canary
+
+    config.credentials.write_text("second credential value", encoding="utf-8")
+    assert client.get("/api/manager/status").json()["grid_canary"] is None
+    remote_canary.assert_awaited_once_with(config)
 
 
 def test_process_commands_are_shell_free_and_fixed_by_action(tmp_path):

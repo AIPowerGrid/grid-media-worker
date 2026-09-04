@@ -85,6 +85,10 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   lyrics are not persisted in service journals.
 - Local control surfaces return stable error classes, not raw exception or
   subprocess output. Detailed diagnostics remain in local process logs.
+- The local profile canary proves only pinned runtime readiness. The manager's
+  separate Grid test uses the rig-only credential server-side, accepts no
+  browser-selected model or payload, and displays only Core's bounded,
+  economically inert exact-worker result.
 - Job failures sent to Core are generic and never contain local paths or raw
   backend exception text; operators diagnose the detailed local log entry.
 - Media capacity is one simultaneous job per signed worker identity. A bounded

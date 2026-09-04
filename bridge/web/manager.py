@@ -66,6 +66,15 @@ _SECRET_PATTERNS = (
 logger = logging.getLogger(__name__)
 
 
+class GridCanaryError(RuntimeError):
+    """Bounded operator-facing failure from the Core connectivity canary."""
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
 @dataclass(frozen=True)
 class ManagerWebConfig:
     profile: Path
@@ -267,6 +276,11 @@ def create_manager_app(
         "expires_at": 0.0,
         "value": None,
     }
+    grid_canary_cache: dict[str, Any] = {
+        "credential_stamp": None,
+        "value": None,
+    }
+    grid_canary_lock = asyncio.Lock()
 
     @app.middleware("http")
     async def local_session_guard(request: Request, call_next):
@@ -323,6 +337,10 @@ def create_manager_app(
             if config.credentials.exists()
             else None
         )
+        if credential_stamp != grid_canary_cache["credential_stamp"]:
+            grid_canary_cache.update(
+                {"credential_stamp": credential_stamp, "value": None}
+            )
         now = time.monotonic()
         if (
             credential_stamp != grid_cache["credential_stamp"]
@@ -336,7 +354,33 @@ def create_manager_app(
                 }
             )
         result["grid"] = grid_cache["value"]
+        result["grid_canary"] = grid_canary_cache["value"]
         return result
+
+    @app.post("/api/manager/grid-canary")
+    async def manager_grid_canary(request: Request):
+        try:
+            payload = await request.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(400, "invalid JSON") from exc
+        if not isinstance(payload, dict) or payload:
+            raise HTTPException(400, "Grid canary accepts no parameters")
+        if grid_canary_lock.locked():
+            raise HTTPException(409, "a Grid connectivity test is already running")
+        async with grid_canary_lock:
+            try:
+                result = await _worker_grid_canary(config)
+            except GridCanaryError as exc:
+                raise HTTPException(exc.status_code, exc.detail) from exc
+            credential_stamp = (
+                config.credentials.stat().st_mtime_ns
+                if config.credentials.exists()
+                else None
+            )
+            grid_canary_cache.update(
+                {"credential_stamp": credential_stamp, "value": result}
+            )
+        return {"ok": result["status"] == "passed", "canary": result}
 
     @app.post("/api/manager/action")
     async def manager_action(request: Request):
@@ -589,6 +633,91 @@ async def _worker_grid_status(
             if isinstance(payout.get("last_paid_at"), str)
             else None,
         },
+    }
+
+
+async def _worker_grid_canary(
+    config: ManagerWebConfig,
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> dict[str, Any]:
+    """Run Core's exact-worker media canary without exposing rig credentials."""
+    if not config.credentials.exists():
+        raise GridCanaryError(409, "Connect this worker before running a Grid test.")
+    try:
+        credentials = load_worker_credentials(config.credentials)
+        base = grid_api_base_url(str(credentials["grid_api_url"]))
+        api = base if base.endswith("/v1") else f"{base}/v1"
+        api_key = str(credentials["api_key"])
+        worker_name = str(credentials["worker_name"])
+    except (KeyError, OSError, ValueError, EnrollmentClientError) as exc:
+        raise GridCanaryError(409, "Worker credentials are unavailable or invalid.") from exc
+
+    owns_client = client is None
+    http = client or httpx.AsyncClient(timeout=920.0)
+    try:
+        response = await http.post(
+            f"{api}/workers/self/canary",
+            headers={"apikey": api_key},
+            json={},
+        )
+    except httpx.HTTPError as exc:
+        raise GridCanaryError(503, "Grid connectivity test is unavailable.") from exc
+    finally:
+        if owns_client:
+            await http.aclose()
+
+    errors = {
+        401: "Worker credential was rejected by the Grid.",
+        403: "This worker credential cannot run a Grid test.",
+        404: "Grid connectivity testing is not available on Core yet.",
+        409: "The worker must be online before running a Grid test.",
+        429: "A Grid test ran recently. Try again in a few minutes.",
+    }
+    if response.status_code != 200:
+        raise GridCanaryError(
+            response.status_code if response.status_code in errors else 502,
+            errors.get(response.status_code, "Grid connectivity test failed."),
+        )
+    try:
+        result = response.json()
+    except ValueError as exc:
+        raise GridCanaryError(502, "Grid returned an invalid canary result.") from exc
+
+    latency_ms = result.get("latency_ms") if isinstance(result, dict) else None
+    model = result.get("model") if isinstance(result, dict) else None
+    modality = result.get("modality") if isinstance(result, dict) else None
+    reason = result.get("reason") if isinstance(result, dict) else None
+    valid = (
+        isinstance(result, dict)
+        and result.get("schema") == "aipg.worker.canary.v1"
+        and result.get("status") in {"passed", "failed"}
+        and result.get("worker_name") == worker_name
+        and isinstance(model, str)
+        and 0 < len(model) <= 256
+        and modality in {"image", "video", "audio"}
+        and isinstance(latency_ms, int)
+        and not isinstance(latency_ms, bool)
+        and latency_ms >= 0
+        and isinstance(reason, str)
+        and 0 < len(reason) <= 64
+        and result.get("proof_scope")
+        == "hard_targeted_connectivity_and_media_output"
+        and result.get("quality_claim") == "none"
+        and result.get("economic_effect") == "none"
+    )
+    if not valid:
+        raise GridCanaryError(502, "Grid returned an invalid canary result.")
+    return {
+        "status": result["status"],
+        "worker_name": worker_name,
+        "model": model,
+        "modality": modality,
+        "latency_ms": latency_ms,
+        "reason": reason,
+        "proof_scope": "hard_targeted_connectivity_and_media_output",
+        "quality_claim": "none",
+        "economic_effect": "none",
     }
 
 

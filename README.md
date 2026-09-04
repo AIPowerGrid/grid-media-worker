@@ -266,7 +266,11 @@ install and canary state, payout-wallet delegation, and redacted process logs.
 Its setup button runs the same fail-closed CLI lifecycle described below; the UI
 cannot enable an unsigned profile or advertise a capability before validation.
 It uses a one-time local browser session, requires exact same-origin JSON for
-controls, and rejects non-loopback binds.
+controls, and rejects non-loopback binds. Once a signed enrolled worker is
+online, **Run Grid test** asks Core to route one governed audio, image, or video
+canary to that exact rig. This is separate from the local profile canary and has
+no charge, den, payout, strike, validator-evidence, or quality effect; the rig
+credential stays server-side.
 
 The equivalent terminal command is:
 
