@@ -135,6 +135,10 @@ def test_manager_capacity_is_bounded_persistent_and_watched(tmp_path, monkeypatc
     assert "Jobs completed" in page.text
     assert "Den recorded" in page.text
     assert 'id="grid-canary-action"' in page.text
+    assert 'id="capability-detected"' in page.text
+    assert 'id="capability-compatible"' in page.text
+    assert 'id="capability-qualified"' in page.text
+    assert 'id="capability-advertised"' in page.text
     assert "Run Grid test" in page.text
 
     wrong_origin = client.post(
