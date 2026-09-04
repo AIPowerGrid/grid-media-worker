@@ -77,8 +77,42 @@ function render(data) {
 
   renderCapacity(data.capacity || {});
   renderGrid(data.grid, data.grid_canary);
+  renderCapabilityState(data);
   renderProcess(data.process || {});
   configureActions(data);
+}
+
+function renderCapabilityState(data) {
+  const profile = data.profile || {};
+  const hardware = data.hardware || {};
+  const install = data.installation || {};
+  const worker = data.grid?.worker || {};
+  const advertised = [...(worker.job_types || []), ...(worker.models || [])];
+  const compatible = Boolean(
+    profile.available
+    && profile.recipe_root
+    && hardware.status
+    && hardware.status !== "unsupported"
+  );
+  const qualified = Boolean(
+    profile.signature_verified
+    && profile.status === "active"
+    && install.valid
+    && install.canary_passed
+  );
+  const online = Boolean(data.grid?.available && worker.online === true && advertised.length);
+
+  text("capability-detected", install.valid ? "Runtime installed" : "Not detected");
+  text("capability-compatible", compatible ? "Known profile match" : "Not confirmed");
+  text(
+    "capability-qualified",
+    qualified
+      ? "Qualified"
+      : install.canary_passed
+        ? "Evidence only"
+        : "Pending local test"
+  );
+  text("capability-advertised", online ? advertised.join(", ") : "No");
 }
 
 function renderGrid(grid, canary) {
