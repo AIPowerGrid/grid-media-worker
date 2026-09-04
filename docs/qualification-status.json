@@ -6,8 +6,8 @@
     "digest": "8a6ee19c725db465d7f27169b4cbdbd6b9618388d3541f9415bb5411a48e2497"
   },
   "qualification_release": {
-    "tag": "manager-qualification-v0.1.0-preview.1",
-    "url": "https://github.com/AIPowerGrid/grid-media-worker/releases/tag/manager-qualification-v0.1.0-preview.1"
+    "tag": "manager-qualification-v0.2.0-preview.1",
+    "url": "https://github.com/AIPowerGrid/grid-media-worker/releases/tag/manager-qualification-v0.2.0-preview.1"
   },
   "runs_per_evidence_set": 3,
   "classes": [
@@ -31,7 +31,7 @@
     }
   ],
   "release_ready": false,
-  "updated_at": "2026-08-30T06:54:03Z",
+  "updated_at": "2026-09-04T21:10:10Z",
   "participation_url": "https://github.com/AIPowerGrid/grid-media-worker/issues/new?template=media-manager-qualification.yml",
   "cohort_url": "https://github.com/AIPowerGrid/grid-media-worker/issues/8",
   "runbook_url": "https://github.com/AIPowerGrid/grid-media-worker/blob/main/docs/MANAGER_QUALIFICATION.md"
