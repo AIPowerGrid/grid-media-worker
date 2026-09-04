@@ -46,6 +46,22 @@ comfy-bridge
 The bridge advertises only models it can resolve and serve. `GRID_MODEL` can
 restrict that list, but it cannot make a missing workflow or checkpoint valid.
 
+Capacity remains under the operator's control. Media registrations currently
+serve exactly one simultaneous job; `GRID_THREADS` must therefore remain `1`.
+`GRID_SCHEDULE` accepts at most 32 JSON windows in the operator's local time.
+A matching window with `concurrency: 0` pauses new claims and disconnects after
+any active job finishes; `concurrency: 1` makes the worker available. Outside
+matching windows, the worker uses `GRID_THREADS`.
+
+```ini
+GRID_THREADS=1
+GRID_SCHEDULE=[{"days":"mon-fri","start":"08:00","end":"18:00","concurrency":0}]
+```
+
+The example leaves the worker available outside weekday business hours. Values
+above one fail closed until Core supports multiple media claim slots for one
+signed worker identity.
+
 ## Help Validate the Grid
 
 Already run persistent infrastructure? AI Power Grid is recruiting two more

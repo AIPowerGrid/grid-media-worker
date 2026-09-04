@@ -207,6 +207,18 @@
       <input type="text" x-model="config.workflow_file" placeholder="e.g. flux2_klein_4b_api.json">
     </label>
 
+    <label class="field">
+      <span class="field-label">Maximum Simultaneous Jobs</span>
+      <input type="number" x-model="config.max_threads" min="1" max="1">
+      <span class="field-hint">The current media protocol safely serves one job at a time.</span>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Operating Schedule <span class="optional">(optional, local time)</span></span>
+      <textarea x-model="config.schedule" rows="4" placeholder='[{"days":"mon-fri","start":"08:00","end":"18:00","concurrency":0}]'></textarea>
+      <span class="field-hint">Use concurrency 0 to pause during a window and 1 to accept work.</span>
+    </label>
+
     <div class="step-actions">
       <button class="btn btn-outline" @click="step = 1">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
@@ -245,6 +257,10 @@
         <span class="review-label">Workflows</span>
         <span class="review-value" x-text="config.workflow_file"></span>
       </div>
+      <div class="review-row">
+        <span class="review-label">Capacity</span>
+        <span class="review-value" x-text="config.schedule ? 'Scheduled, one job at a time' : 'Always available, one job at a time'"></span>
+      </div>
     </div>
 
     <div class="step-actions">
@@ -281,6 +297,8 @@ function setupWizard() {
       worker_name: '',
       models: '',
       workflow_file: '',
+      max_threads: '1',
+      schedule: '',
     },
     checking_url: false,
     url_status: null,
@@ -397,6 +415,8 @@ function setupWizard() {
         if (this.config.comfyui_base_path) payload.COMFYUI_BASE_PATH = this.config.comfyui_base_path;
         if (this.config.models) payload.GRID_MODEL = this.config.models;
         if (this.config.workflow_file) payload.WORKFLOW_FILE = this.config.workflow_file;
+        payload.GRID_THREADS = this.config.max_threads;
+        if (this.config.schedule) payload.GRID_SCHEDULE = this.config.schedule;
 
         const r = await fetch('/api/setup/complete', {
           method: 'POST',

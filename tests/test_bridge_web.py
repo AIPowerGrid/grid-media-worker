@@ -149,12 +149,14 @@ def test_setup_inventory_rejects_extra_fields():
     assert response.status_code == 400
 
 
-def test_media_settings_do_not_expose_unused_threads_control(monkeypatch):
+def test_media_settings_expose_truthful_serial_capacity_controls(monkeypatch):
     monkeypatch.setitem(web_app.worker_state, "setup_complete", True)
     response = _client().get("/settings")
     assert response.status_code == 200
-    assert "GRID_THREADS" not in response.text
-    assert ">Threads<" not in response.text
+    assert "GRID_THREADS" in response.text
+    assert "GRID_SCHEDULE" in response.text
+    assert 'max="1"' in response.text
+    assert "currently receive one job at a time" in response.text
 
 
 def test_setup_exposes_capability_states_and_operator_selection():
@@ -260,6 +262,20 @@ def test_settings_reject_environment_line_injection():
         routes._validated_settings_form(
             {"GRID_WORKER_NAME": "worker\nGRID_API_KEY=attacker"}
         )
+
+
+@pytest.mark.parametrize(
+    "settings",
+    [
+        {"GRID_THREADS": "2"},
+        {"GRID_THREADS": ""},
+        {"GRID_SCHEDULE": '[{"days":"daily","concurrency":2}]'},
+        {"GRID_SCHEDULE": '[{"days":"funday","concurrency":0}]'},
+    ],
+)
+def test_media_capacity_settings_fail_closed(settings):
+    with pytest.raises(ValueError):
+        routes._validated_settings_form(settings)
 
 
 def test_settings_values_are_json_encoded_in_script(monkeypatch):

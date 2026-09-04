@@ -47,6 +47,11 @@
         <p>None configured</p>
       </template>
     </div>
+
+    <div class="card">
+      <h3>Capacity</h3>
+      <p x-text="status.config?.schedule ? 'Scheduled, one job at a time' : 'Always available, one job at a time'"></p>
+    </div>
   </div>
 </div>
 

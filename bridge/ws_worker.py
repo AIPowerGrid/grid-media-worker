@@ -31,6 +31,7 @@ except ImportError:  # pragma: no cover
     websockets = None
 
 from .config import Settings
+from .capacity import effective_concurrency, validate_max_concurrency, validate_schedule
 from .model_mapper import get_grid_models, initialize_model_mapper, is_retired_model
 try:
     from .model_mapper import is_servable
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 BRIDGE_AGENT = "comfy-bridge/ws:1"
 RECONNECT_DELAY_S = 5
 RUNTIME_HEALTH_INTERVAL_S = 10
+CAPACITY_POLL_INTERVAL_S = 15
 RUNTIME_HEALTH_FAILURE_LIMIT = 3
 RUNTIME_HEALTH_TIMEOUT_S = 5
 PROGRESS_INTERVAL = 2.0
@@ -204,6 +206,11 @@ class WSWorker:
     async def run(self):
         if websockets is None:
             raise RuntimeError("websockets package required for the Grid worker")
+        try:
+            Settings.THREADS = validate_max_concurrency(Settings.THREADS)
+            Settings.GRID_SCHEDULE = validate_schedule(Settings.GRID_SCHEDULE)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc
         # Advertise-only-what-you-can-serve gate. Applies to an explicit
         # GRID_MODEL override too — a worker must never advertise a model whose
         # workflow is missing or whose weights aren't loaded in ComfyUI (that's
@@ -267,13 +274,15 @@ class WSWorker:
         logger.info(f"WS worker advertising servable models: {self.models}")
 
         while True:
+            await self._wait_until_available()
             try:
                 await self._session()
             except asyncio.CancelledError:
                 raise
             except Exception as e:
                 logger.warning(f"WS session ended: {e} — reconnecting in {RECONNECT_DELAY_S}s")
-            await asyncio.sleep(RECONNECT_DELAY_S)
+            if self._accepting_jobs():
+                await asyncio.sleep(RECONNECT_DELAY_S)
 
     async def _session(self):
         url = grid_ws_url()
@@ -286,11 +295,12 @@ class WSWorker:
             logger.info(f"Registered as worker {ready.get('worker_id')}")
 
             health_task = asyncio.create_task(self._monitor_runtime_health())
+            schedule_task = asyncio.create_task(self._wait_until_paused())
             try:
                 while True:
                     receive_task = asyncio.create_task(ws.recv())
                     done, _pending = await asyncio.wait(
-                        {receive_task, health_task},
+                        {receive_task, health_task, schedule_task},
                         return_when=asyncio.FIRST_COMPLETED,
                     )
                     if health_task in done:
@@ -300,6 +310,14 @@ class WSWorker:
                         except (asyncio.CancelledError, Exception):
                             pass
                         health_task.result()
+
+                    if schedule_task in done:
+                        receive_task.cancel()
+                        await asyncio.gather(receive_task, return_exceptions=True)
+                        logger.info(
+                            "Operating schedule paused new work; drained active job and disconnected"
+                        )
+                        return
 
                     msg = json.loads(receive_task.result())
                     mtype = msg.get("type")
@@ -313,10 +331,32 @@ class WSWorker:
                         logger.error(f"Server error: {msg.get('message')}")
             finally:
                 health_task.cancel()
-                try:
-                    await health_task
-                except (asyncio.CancelledError, Exception):
-                    pass
+                schedule_task.cancel()
+                await asyncio.gather(
+                    health_task,
+                    schedule_task,
+                    return_exceptions=True,
+                )
+
+    def _accepting_jobs(self) -> bool:
+        return bool(
+            effective_concurrency(
+                Settings.GRID_SCHEDULE,
+                max_concurrency=Settings.THREADS,
+            )
+        )
+
+    async def _wait_until_available(self) -> None:
+        logged = False
+        while not self._accepting_jobs():
+            if not logged:
+                logger.info("Operating schedule is paused; worker remains off the Grid")
+                logged = True
+            await asyncio.sleep(CAPACITY_POLL_INTERVAL_S)
+
+    async def _wait_until_paused(self) -> None:
+        while self._accepting_jobs():
+            await asyncio.sleep(CAPACITY_POLL_INTERVAL_S)
 
     async def _check_runtime_health(self):
         if self.direct_audio:

@@ -46,8 +46,10 @@ canary, wallet-pairing, and worker process state.
 - The ComfyUI inventory is descriptive only. Keep the state progression
   explicit: detected, compatible, qualified, then advertised. Never label a
   local workflow as qualified or advertised before its runtime gate passes.
-- Do not expose `GRID_THREADS` in the UI unless media dispatch actually becomes
-  concurrent. The current ComfyUI worker handles jobs serially.
+- The UI exposes the current one-job media limit and a bounded local-time
+  `GRID_SCHEDULE`. Matching windows may pause (`concurrency: 0`) or accept one
+  job (`concurrency: 1`). Do not permit values above one until Core supports
+  multiple claim slots for one signed worker identity.
 - Browser dependencies must be exact-versioned and integrity-pinned; do not
   restore floating CDN ranges on a page that handles worker credentials.
 - Manager actions execute the same reviewed CLI commands as the terminal path;

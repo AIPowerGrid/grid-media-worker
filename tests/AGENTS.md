@@ -10,6 +10,8 @@ and the WebSocket worker.
 - `test_bridge_web.py` - legacy loopback bridge dashboard/settings rendering,
   same-origin and trusted-executable boundaries, URL/config validation, plus
   startup-failure supervision against the installed FastAPI/Starlette API.
+- `test_capacity.py` - bounded schedule validation, local-time and overnight
+  evaluation, plus the fail-closed one-job media protocol limit.
 - `test_ws_worker.py` - WebSocket registration, dispatch, result, failure
   behavior, and runtime-health capability withdrawal.
 - `test_model_mapper.py` - model-reference resolution, capability inventory,
