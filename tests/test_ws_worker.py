@@ -110,6 +110,33 @@ def test_media_result_hash_orders_outputs_by_index():
 
 
 @pytest.mark.asyncio
+async def test_worker_observes_capacity_file_changes_without_restart(tmp_path, monkeypatch):
+    capacity_file = tmp_path / "capacity.json"
+    capacity_file.write_text("", encoding="utf-8")
+    monkeypatch.setattr(Settings, "GRID_CAPACITY_FILE", str(capacity_file))
+    monkeypatch.setattr(Settings, "GRID_SCHEDULE", "")
+    monkeypatch.setattr(Settings, "THREADS", 1)
+    worker = WSWorker()
+    try:
+        assert worker._accepting_jobs() is True
+
+        capacity_file.write_text(
+            '[{"days":"daily","concurrency":0}]', encoding="utf-8"
+        )
+        assert worker._accepting_jobs() is False
+
+        capacity_file.write_text("not-json", encoding="utf-8")
+        assert worker._accepting_jobs() is False
+        assert worker._capacity_error == "Schedule must be valid JSON"
+
+        capacity_file.write_text("", encoding="utf-8")
+        assert worker._accepting_jobs() is True
+        assert worker._capacity_error is None
+    finally:
+        await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
 async def test_job_error_does_not_expose_worker_exception_details(monkeypatch):
     worker = WSWorker()
     socket = AsyncMock()

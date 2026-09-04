@@ -74,6 +74,9 @@ class Settings:
     # JSON windows in operator-local time. A matching window may set
     # concurrency to 0 (pause) or 1 (available); outside windows THREADS wins.
     GRID_SCHEDULE = os.getenv("GRID_SCHEDULE", "")
+    # The standalone manager points this at its local capacity file so a
+    # running worker can observe pause/schedule changes without being killed.
+    GRID_CAPACITY_FILE = os.getenv("GRID_CAPACITY_FILE", "").strip()
     MAX_PIXELS = int(os.getenv("GRID_MAX_PIXELS", "20971520"))
     WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", os.path.join(os.getcwd(), "workflows"))
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)

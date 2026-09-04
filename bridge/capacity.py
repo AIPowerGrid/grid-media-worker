@@ -8,6 +8,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 
@@ -91,6 +92,21 @@ def effective_concurrency(
         if _window_active(current, window):
             return int(window["concurrency"])
     return maximum
+
+
+def load_schedule(default: str, capacity_file: str = "") -> str:
+    """Load a locally managed schedule override without weakening validation."""
+    path_text = str(capacity_file or "").strip()
+    if not path_text:
+        return validate_schedule(default)
+    path = Path(path_text).expanduser()
+    if not path.exists():
+        return validate_schedule(default)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Capacity schedule file must be a regular file")
+    if path.stat().st_size > 8192:
+        raise ValueError("Capacity schedule file is too large")
+    return validate_schedule(path.read_text(encoding="utf-8"))
 
 
 def _parse_days(spec: str, *, strict: bool = False) -> set[int]:

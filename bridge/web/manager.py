@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from ..capacity import effective_concurrency, load_schedule, validate_schedule
 from ..enrollment import EnrollmentClientError, load_worker_credentials
 from ..identity import (
     load_delegation_certificate,
@@ -48,6 +49,9 @@ LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 SESSION_COOKIE = "aipg_manager_session"
 MAX_LOG_LINES = 240
 MAX_LOG_LINE = 1000
+CAPACITY_FILE_NAME = "capacity.json"
+CAPACITY_MODES = frozenset({"always", "paused", "maintenance"})
+MAINTENANCE_DAYS = frozenset({"daily", "mon-fri", "sat-sun"})
 _SECRET_PATTERNS = (
     re.compile(r"\bgrid_[A-Za-z0-9_-]{12,}\b"),
     re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s]+"),
@@ -110,7 +114,7 @@ class ManagerProcessController:
             if self.process is not None and self.process.returncode is None:
                 raise RuntimeError("a manager operation is already running")
             command = self._command(action)
-            env = {**os.environ, "PYTHONUNBUFFERED": "1"}
+            env = self._environment()
             self.error = None
             self.returncode = None
             self.action = action
@@ -127,6 +131,13 @@ class ManagerProcessController:
             self._track(asyncio.create_task(self._read_stream(self.process.stdout, "out")))
             self._track(asyncio.create_task(self._read_stream(self.process.stderr, "err")))
             self._track(asyncio.create_task(self._wait_for_exit(self.process)))
+
+    def _environment(self) -> dict[str, str]:
+        return {
+            **os.environ,
+            "PYTHONUNBUFFERED": "1",
+            "GRID_CAPACITY_FILE": str(_capacity_path(self.config)),
+        }
 
     async def stop(self) -> None:
         async with self._lock:
@@ -315,6 +326,22 @@ def create_manager_app(
             raise HTTPException(409, "a manager operation is already running") from exc
         return {"ok": True, "action": action}
 
+    @app.post("/api/manager/capacity")
+    async def manager_capacity(request: Request):
+        try:
+            payload = await request.json()
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(400, "invalid JSON") from exc
+        try:
+            schedule = _capacity_schedule(payload)
+            _write_capacity(config, schedule)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        except OSError as exc:
+            logger.warning("Manager capacity persistence failed", exc_info=exc)
+            raise HTTPException(500, "capacity settings could not be saved") from exc
+        return {"ok": True, "capacity": _capacity_status(config)}
+
     return app
 
 
@@ -362,6 +389,7 @@ def _manager_status(
         "hardware": {"status": "unknown", "reasons": [], "warnings": []},
         "installation": {"valid": False, "canary_passed": False, "error": None},
         "identity": {"worker_signer": None, "connected": False, "payout_wallet": None},
+        "capacity": _capacity_status(config),
         "process": controller.snapshot(),
         "ready": False,
     }
@@ -399,7 +427,8 @@ def _manager_status(
             "error": None,
         }
     except ProfileStateError as exc:
-        logger.warning("Manager installation-state inspection failed", exc_info=exc)
+        if config.state.exists():
+            logger.warning("Manager installation-state inspection failed", exc_info=exc)
         result["installation"]["error"] = "Installation is incomplete or invalid"
 
     try:
@@ -454,6 +483,100 @@ def _manager_status(
         and result["identity"]["connected"]
     )
     return result
+
+
+def _capacity_path(config: ManagerWebConfig) -> Path:
+    return config.install_root / CAPACITY_FILE_NAME
+
+
+def _capacity_schedule(payload: object) -> str:
+    if not isinstance(payload, dict):
+        raise ValueError("capacity settings must be an object")
+    mode = str(payload.get("mode") or "").strip().lower()
+    if mode not in CAPACITY_MODES:
+        raise ValueError("capacity mode is invalid")
+    if mode == "always":
+        return ""
+    if mode == "paused":
+        return validate_schedule('[{"days":"daily","concurrency":0}]')
+
+    days = str(payload.get("days") or "").strip().lower()
+    start = str(payload.get("start") or "").strip()
+    end = str(payload.get("end") or "").strip()
+    if days not in MAINTENANCE_DAYS:
+        raise ValueError("maintenance days are invalid")
+    if start == end:
+        raise ValueError("maintenance start and end must differ")
+    return validate_schedule(
+        json.dumps(
+            [{"days": days, "start": start, "end": end, "concurrency": 0}],
+            separators=(",", ":"),
+        )
+    )
+
+
+def _write_capacity(config: ManagerWebConfig, schedule: str) -> None:
+    canonical = validate_schedule(schedule)
+    config.install_root.mkdir(parents=True, exist_ok=True)
+    path = _capacity_path(config)
+    if path.exists() and path.is_symlink():
+        raise ValueError("capacity schedule file must not be a symlink")
+    temporary = config.install_root / f".{CAPACITY_FILE_NAME}.{secrets.token_hex(8)}.tmp"
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            stream.write(canonical)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        path.chmod(0o600)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _capacity_status(config: ManagerWebConfig) -> dict[str, Any]:
+    path = _capacity_path(config)
+    try:
+        schedule = load_schedule("", str(path))
+        windows = json.loads(schedule) if schedule else []
+        mode = "always"
+        days = "daily"
+        start = "02:00"
+        end = "04:00"
+        if windows:
+            window = windows[0]
+            days = window.get("days", days)
+            start = window.get("start", start)
+            end = window.get("end", end)
+            mode = (
+                "paused"
+                if "start" not in window and "end" not in window
+                else "maintenance"
+            )
+        concurrency = effective_concurrency(schedule)
+        return {
+            "mode": mode,
+            "days": days,
+            "start": start,
+            "end": end,
+            "max_concurrency": 1,
+            "effective_concurrency": concurrency,
+            "accepting_jobs": bool(concurrency),
+            "error": None,
+        }
+    except (OSError, UnicodeError, ValueError) as exc:
+        logger.warning("Manager capacity inspection failed", exc_info=exc)
+        return {
+            "mode": "invalid",
+            "days": "daily",
+            "start": "02:00",
+            "end": "04:00",
+            "max_concurrency": 1,
+            "effective_concurrency": 0,
+            "accepting_jobs": False,
+            "error": "Capacity settings are invalid; new work is paused",
+        }
 
 
 def _manager_invocation() -> list[str]:

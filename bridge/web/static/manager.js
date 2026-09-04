@@ -1,4 +1,4 @@
-const state = { lastLogCount: 0 };
+const state = { lastLogCount: 0, capacityLoaded: false };
 
 const el = (id) => document.getElementById(id);
 const text = (id, value) => { el(id).textContent = value ?? "-"; };
@@ -75,8 +75,25 @@ function render(data) {
     step("identity", "Pending", install.valid && canaryPassed ? "active" : "");
   }
 
+  renderCapacity(data.capacity || {});
   renderProcess(data.process || {});
   configureActions(data);
+}
+
+function renderCapacity(capacity) {
+  const accepting = Boolean(capacity.accepting_jobs);
+  const capacityKind = capacity.error ? "bad" : accepting ? "good" : "warn";
+  badge("capacity-badge", capacity.error ? "Invalid" : accepting ? "Available" : "Paused", capacityKind);
+  el("capacity-error").hidden = !capacity.error;
+  el("capacity-error").textContent = capacity.error || "";
+  if (!state.capacityLoaded && capacity.mode && capacity.mode !== "invalid") {
+    el("capacity-mode").value = capacity.mode;
+    el("capacity-days").value = capacity.days || "daily";
+    el("capacity-start").value = capacity.start || "02:00";
+    el("capacity-end").value = capacity.end || "04:00";
+    state.capacityLoaded = true;
+  }
+  toggleMaintenanceFields();
 }
 
 function renderProcess(process) {
@@ -151,6 +168,30 @@ async function postAction(action) {
   await poll();
 }
 
+async function saveCapacity() {
+  const mode = el("capacity-mode").value;
+  const payload = { mode };
+  if (mode === "maintenance") {
+    payload.days = el("capacity-days").value;
+    payload.start = el("capacity-start").value;
+    payload.end = el("capacity-end").value;
+  }
+  const response = await fetch("/api/manager/capacity", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail || `Capacity update failed (${response.status})`);
+  }
+  renderCapacity((await response.json()).capacity || {});
+}
+
+function toggleMaintenanceFields() {
+  el("maintenance-fields").hidden = el("capacity-mode").value !== "maintenance";
+}
+
 async function poll() {
   try {
     const response = await fetch("/api/manager/status", { cache: "no-store" });
@@ -173,6 +214,22 @@ el("primary-action").addEventListener("click", async () => {
 el("stop-action").addEventListener("click", async () => {
   try { await postAction("stop"); }
   catch (error) { el("process-error").hidden = false; el("process-error").textContent = error.message; }
+});
+el("capacity-mode").addEventListener("change", toggleMaintenanceFields);
+el("capacity-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const button = el("save-capacity");
+  const feedback = el("capacity-feedback");
+  button.disabled = true;
+  feedback.textContent = "Saving...";
+  try {
+    await saveCapacity();
+    feedback.textContent = "Saved. Running workers update within a few seconds.";
+  } catch (error) {
+    feedback.textContent = error.message;
+  } finally {
+    button.disabled = false;
+  }
 });
 
 poll();

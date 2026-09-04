@@ -50,6 +50,11 @@ canary, wallet-pairing, and worker process state.
   `GRID_SCHEDULE`. Matching windows may pause (`concurrency: 0`) or accept one
   job (`concurrency: 1`). Do not permit values above one until Core supports
   multiple claim slots for one signed worker identity.
+- The standalone manager persists only three bounded availability modes:
+  always available, paused, or one daily/weekday/weekend maintenance window.
+  It writes a local `0600` capacity file that the serving child watches. A
+  pause must drain an active render before disconnecting; never implement it by
+  terminating the serving process.
 - Browser dependencies must be exact-versioned and integrity-pinned; do not
   restore floating CDN ranges on a page that handles worker credentials.
 - Manager actions execute the same reviewed CLI commands as the terminal path;
