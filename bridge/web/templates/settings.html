@@ -42,6 +42,16 @@
         <input type="number" x-model="form.GRID_BATCH_SIZE" min="1" max="16">
       </label>
       <label>
+        Maximum Simultaneous Jobs
+        <input type="number" x-model="form.GRID_THREADS" min="1" max="1">
+        <span class="hint">Media workers currently receive one job at a time.</span>
+      </label>
+      <label>
+        Operating Schedule <span class="hint">(optional, local time)</span>
+        <textarea x-model="form.GRID_SCHEDULE" rows="5" placeholder='[{"days":"mon-fri","start":"08:00","end":"18:00","concurrency":0}]'></textarea>
+        <span class="hint">Matching windows override availability. Use concurrency 0 to pause and 1 to accept work.</span>
+      </label>
+      <label>
         Max Pixels
         <input type="number" x-model="form.GRID_MAX_PIXELS">
       </label>
@@ -75,6 +85,8 @@ function settingsForm() {
       GRID_NSFW: {{ settings.GRID_NSFW | tojson }},
       GRID_MAX_PIXELS: {{ settings.GRID_MAX_PIXELS | tojson }},
       GRID_BATCH_SIZE: {{ settings.GRID_BATCH_SIZE | tojson }},
+      GRID_THREADS: {{ settings.GRID_THREADS | tojson }},
+      GRID_SCHEDULE: {{ settings.GRID_SCHEDULE | tojson }},
     },
     async save() {
       this.saving = true;

@@ -67,7 +67,13 @@ class Settings:
     # Keep this below Core's worker receive and client response deadlines.
     ACE_STEP_JOB_TIMEOUT = int(os.getenv("ACE_STEP_JOB_TIMEOUT", "1800"))
     NSFW = os.getenv("GRID_NSFW", "false").lower() == "true"
+    # Core currently grants one media claim slot to each registered worker.
+    # Keep the setting explicit so operators see the real limit and invalid
+    # legacy values fail instead of pretending to provide concurrency.
     THREADS = int(os.getenv("GRID_THREADS", "1"))
+    # JSON windows in operator-local time. A matching window may set
+    # concurrency to 0 (pause) or 1 (available); outside windows THREADS wins.
+    GRID_SCHEDULE = os.getenv("GRID_SCHEDULE", "")
     MAX_PIXELS = int(os.getenv("GRID_MAX_PIXELS", "20971520"))
     WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", os.path.join(os.getcwd(), "workflows"))
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
@@ -78,3 +84,10 @@ class Settings:
     def validate(cls):
         if not cls.GRID_API_KEY:
             raise RuntimeError("GRID_API_KEY environment variable is required.")
+        from .capacity import validate_max_concurrency, validate_schedule
+
+        try:
+            cls.THREADS = validate_max_concurrency(cls.THREADS)
+            cls.GRID_SCHEDULE = validate_schedule(cls.GRID_SCHEDULE)
+        except ValueError as exc:
+            raise RuntimeError(str(exc)) from exc

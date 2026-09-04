@@ -6,6 +6,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from ..config import Settings
+from ..capacity import validate_max_concurrency, validate_schedule
 from ..comfyui_detect import (
     check_comfyui_url,
     detect_comfyui,
@@ -27,6 +28,8 @@ _PERSISTED_SETTINGS = frozenset(
         "GRID_MAX_PIXELS",
         "GRID_MODEL",
         "GRID_NSFW",
+        "GRID_SCHEDULE",
+        "GRID_THREADS",
         "GRID_WORKER_NAME",
         "WORKFLOW_FILE",
     }
@@ -213,6 +216,8 @@ async def api_status():
             "models": Settings.GRID_MODELS,
             "nsfw": Settings.NSFW,
             "max_pixels": Settings.MAX_PIXELS,
+            "max_concurrency": Settings.THREADS,
+            "schedule": Settings.GRID_SCHEDULE,
         },
     }
 
@@ -235,6 +240,8 @@ async def settings_page(request: Request):
                 "GRID_NSFW": str(Settings.NSFW).lower(),
                 "GRID_MAX_PIXELS": str(Settings.MAX_PIXELS),
                 "GRID_BATCH_SIZE": str(Settings.BATCH_SIZE),
+                "GRID_THREADS": str(Settings.THREADS),
+                "GRID_SCHEDULE": Settings.GRID_SCHEDULE,
             },
         },
     )
@@ -310,6 +317,10 @@ def _validated_settings_form(value: object) -> dict[str, str]:
         form["COMFYUI_URL"] = validated_comfyui_url(form["COMFYUI_URL"])
     if "GRID_NSFW" in form and form["GRID_NSFW"].lower() not in {"true", "false"}:
         raise ValueError("GRID_NSFW must be true or false")
+    if "GRID_SCHEDULE" in form:
+        form["GRID_SCHEDULE"] = validate_schedule(form["GRID_SCHEDULE"])
+    if "GRID_THREADS" in form:
+        form["GRID_THREADS"] = str(validate_max_concurrency(form["GRID_THREADS"]))
     for key, lower, upper in (
         ("GRID_BATCH_SIZE", 1, 16),
         ("GRID_MAX_PIXELS", 1, 134_217_728),
@@ -346,5 +357,9 @@ def _reload_settings(form: dict):
         Settings.WORKFLOW_FILE = form["WORKFLOW_FILE"] or None
     if "GRID_BATCH_SIZE" in form:
         Settings.BATCH_SIZE = int(form["GRID_BATCH_SIZE"])
+    if "GRID_THREADS" in form:
+        Settings.THREADS = int(form["GRID_THREADS"])
+    if "GRID_SCHEDULE" in form:
+        Settings.GRID_SCHEDULE = form["GRID_SCHEDULE"]
     if "COMFYUI_BASE_PATH" in form:
         os.environ["COMFYUI_BASE_PATH"] = form["COMFYUI_BASE_PATH"]

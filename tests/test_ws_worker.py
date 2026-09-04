@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 import pytest
@@ -163,6 +164,85 @@ async def test_sustained_runtime_failure_withdraws_worker(monkeypatch):
             await worker._monitor_runtime_health()
     finally:
         await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
+async def test_paused_schedule_waits_before_joining_grid(monkeypatch):
+    worker = WSWorker()
+    states = iter((False, False, True))
+    sleeps = []
+    monkeypatch.setattr(worker, "_accepting_jobs", lambda: next(states))
+
+    async def fake_sleep(seconds):
+        sleeps.append(seconds)
+
+    monkeypatch.setattr(ws_worker_module.asyncio, "sleep", fake_sleep)
+    try:
+        await worker._wait_until_available()
+    finally:
+        await worker.comfy.aclose()
+
+    assert sleeps == [ws_worker_module.CAPACITY_POLL_INTERVAL_S] * 2
+
+
+@pytest.mark.asyncio
+async def test_schedule_pause_waits_for_active_job_before_disconnect(monkeypatch):
+    worker = WSWorker()
+    worker.models = ["model"]
+    socket = AsyncMock()
+    receive_count = 0
+
+    async def receive():
+        nonlocal receive_count
+        receive_count += 1
+        if receive_count == 1:
+            return '{"type":"ready","worker_id":"worker-1"}'
+        if receive_count == 2:
+            return '{"type":"job","id":"job-1","model":"model","payload":{}}'
+        await asyncio.Event().wait()
+
+    socket.recv = AsyncMock(side_effect=receive)
+    active_job_started = asyncio.Event()
+    release_active_job = asyncio.Event()
+    schedule_paused = asyncio.Event()
+
+    async def handle_job(_socket, _message):
+        active_job_started.set()
+        await release_active_job.wait()
+
+    async def wait_until_paused():
+        await schedule_paused.wait()
+
+    class SocketContext:
+        async def __aenter__(self):
+            return socket
+
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(worker, "_handle_job", handle_job)
+    monkeypatch.setattr(worker, "_wait_until_paused", wait_until_paused)
+    monkeypatch.setattr(worker, "_monitor_runtime_health", AsyncMock(side_effect=asyncio.Event().wait))
+    monkeypatch.setattr(ws_worker_module, "grid_ws_url", lambda: "wss://grid.test/v1/workers/ws")
+    monkeypatch.setattr(ws_worker_module, "grid_ws_ssl", lambda _url: None)
+    monkeypatch.setattr(
+        ws_worker_module.websockets,
+        "connect",
+        lambda *_args, **_kwargs: SocketContext(),
+    )
+
+    session = asyncio.create_task(worker._session())
+    await asyncio.wait_for(active_job_started.wait(), timeout=1)
+    schedule_paused.set()
+    await asyncio.sleep(0)
+    assert not session.done()
+    release_active_job.set()
+    try:
+        await asyncio.wait_for(session, timeout=1)
+    finally:
+        await worker.comfy.aclose()
+
+    assert socket.recv.await_count == 3
 
 
 @pytest.mark.asyncio

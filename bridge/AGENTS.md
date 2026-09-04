@@ -87,6 +87,10 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   subprocess output. Detailed diagnostics remain in local process logs.
 - Job failures sent to Core are generic and never contain local paths or raw
   backend exception text; operators diagnose the detailed local log entry.
+- Media capacity is one simultaneous job per signed worker identity. A bounded
+  local-time schedule may pause new claims; a transition to paused drains the
+  active job before disconnecting. `GRID_THREADS` values above one fail closed
+  until Core has an explicit multi-slot worker protocol.
 - A pending enrollment remains authoritative until Core activation is ACKed.
   Existing credential files must not short-circuit a pending ACK retry.
 
