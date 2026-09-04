@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -145,7 +146,8 @@ def test_manager_capacity_is_bounded_persistent_and_watched(tmp_path, monkeypatc
     assert paused.json()["capacity"]["accepting_jobs"] is False
     path = config.install_root / manager.CAPACITY_FILE_NAME
     assert path.read_text(encoding="utf-8") == '[{"days":"daily","concurrency":0}]'
-    assert path.stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o777 == 0o600
     assert controller._environment()["GRID_CAPACITY_FILE"] == str(path)
 
     maintenance = client.post(
