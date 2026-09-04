@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -119,6 +120,76 @@ def test_manager_actions_require_exact_origin_and_json(tmp_path, monkeypatch):
     )
     assert accepted.status_code == 200
     controller.start.assert_awaited_once_with("setup")
+
+
+def test_manager_capacity_is_bounded_persistent_and_watched(tmp_path, monkeypatch):
+    client, config, controller, token = _client(tmp_path, monkeypatch)
+    client.get(f"/bootstrap?token={token}")
+
+    page = client.get("/")
+    assert 'id="capacity-form"' in page.text
+    assert "Maximum simultaneous jobs" in page.text
+
+    wrong_origin = client.post(
+        "/api/manager/capacity",
+        headers={"Origin": "https://attacker.example"},
+        json={"mode": "paused"},
+    )
+    assert wrong_origin.status_code == 403
+
+    paused = client.post(
+        "/api/manager/capacity",
+        headers={"Origin": config.origin},
+        json={"mode": "paused"},
+    )
+    assert paused.status_code == 200
+    assert paused.json()["capacity"]["accepting_jobs"] is False
+    path = config.install_root / manager.CAPACITY_FILE_NAME
+    assert path.read_text(encoding="utf-8") == '[{"days":"daily","concurrency":0}]'
+    if os.name != "nt":
+        assert path.stat().st_mode & 0o777 == 0o600
+    assert controller._environment()["GRID_CAPACITY_FILE"] == str(path)
+
+    maintenance = client.post(
+        "/api/manager/capacity",
+        headers={"Origin": config.origin},
+        json={
+            "mode": "maintenance",
+            "days": "mon-fri",
+            "start": "22:00",
+            "end": "02:00",
+        },
+    )
+    assert maintenance.status_code == 200
+    capacity = maintenance.json()["capacity"]
+    assert capacity["mode"] == "maintenance"
+    assert capacity["days"] == "mon-fri"
+    assert capacity["start"] == "22:00"
+    assert capacity["end"] == "02:00"
+    assert capacity["max_concurrency"] == 1
+    assert capacity["effective_concurrency"] in {0, 1}
+    assert capacity["accepting_jobs"] is bool(capacity["effective_concurrency"])
+    assert capacity["error"] is None
+
+    invalid = client.post(
+        "/api/manager/capacity",
+        headers={"Origin": config.origin},
+        json={
+            "mode": "maintenance",
+            "days": "daily",
+            "start": "02:00",
+            "end": "02:00",
+        },
+    )
+    assert invalid.status_code == 400
+
+    always = client.post(
+        "/api/manager/capacity",
+        headers={"Origin": config.origin},
+        json={"mode": "always"},
+    )
+    assert always.status_code == 200
+    assert always.json()["capacity"]["accepting_jobs"] is True
 
 
 def test_status_keeps_worker_api_key_private(tmp_path, monkeypatch):

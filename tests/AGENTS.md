@@ -40,7 +40,8 @@ and the WebSocket worker.
 - `test_manager_cli.py` - executable command parsing, local worker-key
   lifecycle, and unsigned-draft enrollment denial.
 - `test_manager_web.py` - loopback manager session/origin controls, private
-  status projection, shell-free action commands, and log redaction.
+  status projection, bounded persistent capacity controls, shell-free action
+  commands, and log redaction.
 - `test_enrollment.py` - TLS URL policy, zero-copy Console pairing, private file
   promotion, chain/audience binding, and ACK failure recovery without issuing a
   second credential.

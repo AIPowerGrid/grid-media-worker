@@ -91,6 +91,54 @@
           </div>
           <p class="privacy-note">Your payout wallet signs a delegation. Its private key never enters this machine.</p>
         </div>
+
+        <div class="panel capacity-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Capacity</p>
+              <h2>Choose when this worker accepts jobs</h2>
+            </div>
+            <span id="capacity-badge" class="badge badge-neutral">Checking</span>
+          </div>
+          <div class="capacity-summary">
+            <div><span>Maximum simultaneous jobs</span><strong>1</strong></div>
+            <div><span>Schedule timezone</span><strong>Local machine time</strong></div>
+          </div>
+          <form id="capacity-form" class="capacity-form">
+            <label>
+              Availability
+              <select id="capacity-mode" name="mode">
+                <option value="always">Always available</option>
+                <option value="paused">Paused until resumed</option>
+                <option value="maintenance">Pause during a maintenance window</option>
+              </select>
+            </label>
+            <div id="maintenance-fields" class="maintenance-fields" hidden>
+              <label>
+                Days
+                <select id="capacity-days" name="days">
+                  <option value="daily">Every day</option>
+                  <option value="mon-fri">Monday through Friday</option>
+                  <option value="sat-sun">Saturday and Sunday</option>
+                </select>
+              </label>
+              <label>
+                Starts
+                <input id="capacity-start" name="start" type="time" value="02:00" required>
+              </label>
+              <label>
+                Ends
+                <input id="capacity-end" name="end" type="time" value="04:00" required>
+              </label>
+            </div>
+            <div class="capacity-actions">
+              <button id="save-capacity" class="button button-secondary" type="submit">Save capacity</button>
+              <span id="capacity-feedback" role="status" aria-live="polite"></span>
+            </div>
+          </form>
+          <p class="privacy-note">Pausing stops new claims. A render already in progress finishes before the worker disconnects.</p>
+          <div id="capacity-error" class="notice notice-error" hidden></div>
+        </div>
       </div>
 
       <aside class="side-column">

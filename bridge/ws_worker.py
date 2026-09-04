@@ -31,7 +31,12 @@ except ImportError:  # pragma: no cover
     websockets = None
 
 from .config import Settings
-from .capacity import effective_concurrency, validate_max_concurrency, validate_schedule
+from .capacity import (
+    effective_concurrency,
+    load_schedule,
+    validate_max_concurrency,
+    validate_schedule,
+)
 from .model_mapper import get_grid_models, initialize_model_mapper, is_retired_model
 try:
     from .model_mapper import is_servable
@@ -202,6 +207,7 @@ class WSWorker:
         self.profile_metadata: dict | None = None
         self.profile: dict | None = None
         self.direct_audio = False
+        self._capacity_error: str | None = None
 
     async def run(self):
         if websockets is None:
@@ -339,12 +345,25 @@ class WSWorker:
                 )
 
     def _accepting_jobs(self) -> bool:
-        return bool(
-            effective_concurrency(
+        try:
+            schedule = load_schedule(
                 Settings.GRID_SCHEDULE,
-                max_concurrency=Settings.THREADS,
+                Settings.GRID_CAPACITY_FILE,
             )
-        )
+            accepting = bool(
+                effective_concurrency(
+                    schedule,
+                    max_concurrency=Settings.THREADS,
+                )
+            )
+            self._capacity_error = None
+            return accepting
+        except (OSError, UnicodeError, ValueError) as exc:
+            message = str(exc)
+            if message != self._capacity_error:
+                logger.error("Capacity configuration is invalid; pausing new work: %s", message)
+                self._capacity_error = message
+            return False
 
     async def _wait_until_available(self) -> None:
         logged = False

@@ -5,7 +5,12 @@ from datetime import datetime
 
 import pytest
 
-from bridge.capacity import effective_concurrency, validate_max_concurrency, validate_schedule
+from bridge.capacity import (
+    effective_concurrency,
+    load_schedule,
+    validate_max_concurrency,
+    validate_schedule,
+)
 
 
 def test_schedule_is_canonical_and_applies_local_window():
@@ -45,3 +50,21 @@ def test_media_concurrency_rejects_dead_parallel_setting():
     assert validate_max_concurrency("1") == 1
     with pytest.raises(ValueError, match="exactly one"):
         validate_max_concurrency("2")
+
+
+def test_capacity_file_overrides_static_schedule_and_rejects_symlinks(tmp_path):
+    capacity_file = tmp_path / "capacity.json"
+    capacity_file.write_text('[{"days":"daily","concurrency":0}]', encoding="utf-8")
+
+    assert load_schedule("", str(capacity_file)) == (
+        '[{"days":"daily","concurrency":0}]'
+    )
+    capacity_file.write_text("", encoding="utf-8")
+    assert load_schedule('[{"days":"daily","concurrency":0}]', str(capacity_file)) == ""
+
+    target = tmp_path / "target.json"
+    target.write_text("", encoding="utf-8")
+    capacity_file.unlink()
+    capacity_file.symlink_to(target)
+    with pytest.raises(ValueError, match="regular file"):
+        load_schedule("", str(capacity_file))
