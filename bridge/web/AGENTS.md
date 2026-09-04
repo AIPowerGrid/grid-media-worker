@@ -18,7 +18,9 @@ canary, wallet-pairing, and worker process state.
   `.env` and mutates `Settings` in place.
 - `manager.py` — isolated manager app factory and shell-free lifecycle process
   controller. A random bootstrap token establishes an HttpOnly local session;
-  mutating routes additionally require the exact loopback Origin and JSON.
+  mutating routes additionally require the exact loopback Origin and JSON. It
+  proxies the exact-worker Core canary with the local rig credential and
+  returns only a schema-validated summary.
 - `templates/manager_session_required.html` — safe recovery page for a missing
   local bootstrap session; API callers continue to receive a JSON 403.
 - `templates/` — Jinja2 pages (base, setup, dashboard, settings). `static/` — CSS,
@@ -64,6 +66,11 @@ canary, wallet-pairing, and worker process state.
   Cache that remote status for 30 seconds, invalidating immediately when the
   local credential file changes; the five-second local process poll must not
   become five-second Core database traffic.
+- The manager's Grid-canary action is available only for an online exact-bound
+  worker. It accepts no browser parameters, serializes requests, validates
+  worker name, modality, proof scope, and zero economic/quality effect, and
+  invalidates the retained result when credentials change. Never expose the
+  worker credential or Core's output digest to the browser.
 - Browser dependencies must be exact-versioned and integrity-pinned; do not
   restore floating CDN ranges on a page that handles worker credentials.
 - Manager actions execute the same reviewed CLI commands as the terminal path;

@@ -1,4 +1,4 @@
-const state = { lastLogCount: 0, capacityLoaded: false };
+const state = { lastLogCount: 0, capacityLoaded: false, gridCanaryRunning: false };
 
 const el = (id) => document.getElementById(id);
 const text = (id, value) => { el(id).textContent = value ?? "-"; };
@@ -76,12 +76,15 @@ function render(data) {
   }
 
   renderCapacity(data.capacity || {});
-  renderGrid(data.grid);
+  renderGrid(data.grid, data.grid_canary);
   renderProcess(data.process || {});
   configureActions(data);
 }
 
-function renderGrid(grid) {
+function renderGrid(grid, canary) {
+  const canRun = Boolean(grid?.available && grid.worker?.online === true);
+  el("grid-canary-action").disabled = !canRun || state.gridCanaryRunning;
+  renderGridCanary(canary);
   if (!grid || !grid.available) {
     badge("grid-badge", grid ? "Unavailable" : "Not connected", grid ? "warn" : "neutral");
     text("grid-capabilities", "-");
@@ -101,6 +104,23 @@ function renderGrid(grid) {
   text("grid-den", Number(worker.den_recorded || 0).toLocaleString(undefined, { maximumFractionDigits: 2 }));
   text("grid-payout", payoutLabel(payout));
   text("grid-last-paid", localDate(payout.last_paid_at));
+}
+
+function renderGridCanary(canary) {
+  if (state.gridCanaryRunning) {
+    text("grid-canary-status", "Running");
+    return;
+  }
+  if (!canary) {
+    text("grid-canary-status", "Not run");
+    return;
+  }
+  const label = canary.status === "passed"
+    ? `Passed · ${canary.modality} · ${(canary.latency_ms / 1000).toFixed(1)}s`
+    : canary.status === "failed"
+      ? `Failed · ${canary.reason}`
+      : "Unavailable";
+  text("grid-canary-status", label);
 }
 
 function payoutLabel(payout) {
@@ -230,6 +250,19 @@ async function saveCapacity() {
   renderCapacity((await response.json()).capacity || {});
 }
 
+async function runGridCanary() {
+  const response = await fetch("/api/manager/grid-canary", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.detail || `Grid test failed (${response.status})`);
+  }
+  renderGridCanary(body.canary);
+}
+
 function toggleMaintenanceFields() {
   el("maintenance-fields").hidden = el("capacity-mode").value !== "maintenance";
 }
@@ -258,6 +291,23 @@ el("stop-action").addEventListener("click", async () => {
   catch (error) { el("process-error").hidden = false; el("process-error").textContent = error.message; }
 });
 el("capacity-mode").addEventListener("change", toggleMaintenanceFields);
+el("grid-canary-action").addEventListener("click", async () => {
+  const button = el("grid-canary-action");
+  const feedback = el("grid-canary-feedback");
+  state.gridCanaryRunning = true;
+  button.disabled = true;
+  feedback.textContent = "Testing exact Grid route...";
+  renderGridCanary(null);
+  try {
+    await runGridCanary();
+    feedback.textContent = "Grid test finished.";
+  } catch (error) {
+    feedback.textContent = error.message;
+  } finally {
+    state.gridCanaryRunning = false;
+    await poll();
+  }
+});
 el("capacity-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = el("save-capacity");

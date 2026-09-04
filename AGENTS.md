@@ -117,6 +117,11 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   opens the loopback-only port 8791 control surface. It supervises the same CLI
   lifecycle commands and cannot bypass profile signature, canary, enrollment,
   or capability-advertisement gates.
+- **Local and Grid canaries are separate:** the profile canary qualifies the
+  pinned local runtime. After a signed worker is enrolled and online, the
+  manager may ask Core for one exact-worker Grid-routed media canary. Core
+  chooses its modality and governed payload; it has no billing, den, payout,
+  strike, validator-evidence, or quality effect.
 - **Legacy and managed control UIs are loopback-only.** Remote operation uses an
   SSH tunnel; browser mutations require an exact local Origin and never accept
   a browser-selected executable.
