@@ -162,6 +162,60 @@ async def test_job_error_does_not_expose_worker_exception_details(monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("produced", [0, 1, 4, 5])
+@pytest.mark.respx(assert_all_called=False)
+async def test_batch_requires_exact_outputs_before_any_upload(monkeypatch, tmp_path, produced, respx_mock):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+    monkeypatch.setattr(Settings, "GRID_WORKER_KEY_PATH", str(tmp_path / "absent-key"))
+    prompt = respx_mock.post("http://127.0.0.1:8188/prompt").mock(
+        return_value=Response(200, json={"prompt_id": "prompt-1"}))
+    uploads = [respx_mock.put(f"https://storage.example/{i}").mock(return_value=Response(200)) for i in range(4)]
+    worker, socket = WSWorker(), AsyncMock()
+    monkeypatch.setattr(worker, "_relay_progress", AsyncMock())
+    monkeypatch.setattr(worker, "_collect_outputs", AsyncMock(return_value=[
+        (f"image-{i}".encode(), "image", f"{i}.webp") for i in range(produced)]))
+    job = {
+        "id": "batch-job", "model": "model", "job_type": "image",
+        "payload": {"n": 4, "batch_size": 1, "seed": 20, "recipe_engine": "comfyui", "recipe_spec": {
+            "1": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512, "batch_size": 1}},
+            "2": {"class_type": "SaveImage", "inputs": {"filename_prefix": "test", "images": ["1", 0]}},
+        }},
+        "upload": [{"put_url": f"https://storage.example/{i}", "key": str(i), "content_type": "image/webp"} for i in range(4)],
+    }
+    try:
+        await worker._handle_job(socket, job)
+    finally:
+        await worker.comfy.aclose()
+    graph = ws_worker_module.json.loads(prompt.calls.last.request.content)["prompt"]
+    assert graph["1"]["inputs"]["batch_size"] == 4
+    assert job["payload"]["batch_size"] == 1
+    message = ws_worker_module.json.loads(socket.send.await_args.args[0])
+    if produced == 4:
+        assert message["type"] == "done"
+        assert [r["index"] for r in message["results"]] == [0, 1, 2, 3]
+        assert [r["seed"] for r in message["results"]] == [20, 21, 22, 23]
+        assert all(route.call_count == 1 for route in uploads)
+    else:
+        assert message["type"] == "error"
+        assert all(not route.called for route in uploads)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("slot_count", [0, 3, 5])
+async def test_batch_rejects_wrong_upload_slot_count_before_render(monkeypatch, slot_count):
+    worker, socket = WSWorker(), AsyncMock()
+    build = AsyncMock(side_effect=AssertionError("must not render"))
+    monkeypatch.setattr(ws_worker_module, "build_workflow", build)
+    try:
+        await worker._handle_job(socket, {"id": "bad-slots", "model": "model", "job_type": "image",
+            "payload": {"n": 4}, "upload": [{} for _ in range(slot_count)]})
+    finally:
+        await worker.comfy.aclose()
+    build.assert_not_awaited()
+    assert ws_worker_module.json.loads(socket.send.await_args.args[0])["type"] == "error"
+
+
+@pytest.mark.asyncio
 @respx.mock
 async def test_comfy_health_check_requires_ready_http_runtime(monkeypatch):
     monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")

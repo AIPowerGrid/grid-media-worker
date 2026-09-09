@@ -465,12 +465,14 @@ class WSWorker:
 
     async def _generate_and_upload(self, ws, msg, payload, upload_slots, n):
         job_id = msg["id"]
+        if n < 1 or len(upload_slots) != n:
+            raise RuntimeError("Upload slot count does not match requested output count")
 
         # Adapt the v2 payload to the shape build_workflow expects. The grid is
         # the seed authority; preserve provided seeds and randomize only as a
         # defensive fallback for older cores.
         seeds = resolve_output_seeds(payload, n)
-        payload.setdefault("batch_size", n)
+        payload["batch_size"] = n
         payload["seeds"] = seeds
         payload["seed"] = seeds[0]
         bridge_job = {"id": job_id, "model": msg["model"], "payload": payload}
@@ -512,13 +514,15 @@ class WSWorker:
                 except (asyncio.CancelledError, Exception):
                     pass
 
-        # Upload each output to its presigned slot, hash for the receipt.
+        if len(media_items) != n:
+            raise RuntimeError(
+                f"Generation returned {len(media_items)} outputs; expected {n}"
+            )
+
+        # Validate the full batch before uploading or signing any result.
         results = []
         async with httpx.AsyncClient(timeout=120) as client:
             for i, (media_bytes, media_type, filename) in enumerate(media_items):
-                if i >= len(upload_slots):
-                    logger.warning(f"More outputs than upload slots ({len(media_items)} > {len(upload_slots)}); dropping extras")
-                    break
                 slot = upload_slots[i]
                 r = await client.put(
                     slot["put_url"], content=media_bytes,
