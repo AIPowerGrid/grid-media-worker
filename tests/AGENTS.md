@@ -13,7 +13,10 @@ and the WebSocket worker.
 - `test_capacity.py` - bounded schedule validation, local-time and overnight
   evaluation, plus the fail-closed one-job media protocol limit.
 - `test_ws_worker.py` - WebSocket registration, dispatch, result, failure
-  behavior, and runtime-health capability withdrawal.
+  behavior, and runtime-health capability withdrawal. Batch regressions check
+  authoritative `n` despite conflicting legacy `batch_size`, exact upload slots
+  before rendering, and exact generated count before upload/signing; partial
+  and extra outputs must not become a successful result.
 - `test_model_mapper.py` - model-reference resolution, capability inventory,
   and retired-capability advertisement guards.
 - `test_worker_identity.py` - worker-key custody, payout-wallet delegation,

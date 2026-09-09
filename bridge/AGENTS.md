@@ -47,6 +47,11 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 ## Local Contracts
 
 - Keep transport payload adaptation in `ws_worker.py`, not `workflow.py`.
+- Grid `n` is the output-count authority and overrides the legacy `batch_size`
+  adapter field. Upload slots must match before rendering. Rendered output count
+  must match before any upload or signed `done`; partial or extra batches fail
+  locally rather than uploading a subset or silently dropping extras. Core must
+  still independently verify all requested outputs before charging/rewarding.
 - The worker never holds storage credentials (WS uploads to presigned slots; see root contract).
 - Worker credentials may cross only `wss://` outside loopback. Plaintext remote
   WebSockets require the explicit development-only `GRID_WS_INSECURE` override.
