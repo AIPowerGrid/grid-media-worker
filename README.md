@@ -70,8 +70,8 @@ setup alone cannot make the model sellable.
 Discovery: `/v1/pricing` lists what is sellable, `/v1/status/models` lists
 what is online right now. `/v1/models` (the OpenAI-style list) contains text
 models only — image and video models never appear there. The legacy poll-based
-`/api/v2/*` endpoints are retired and return `410 Gone`; all submission goes
-through `/v1/*`.
+API from before the demand-billing launch is retired and answers `410 Gone`;
+all submission goes through `/v1/*`.
 
 ## Test your own worker end to end
 
