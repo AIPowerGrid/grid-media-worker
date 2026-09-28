@@ -47,9 +47,10 @@ The repository includes several pre-made templates:
 - `Chroma_final.json` - Chroma
 - `wan2_2_t2v_14b.json` - Wan 2.2 text-to-video 14B
 
-Note: a template being present only makes the model *servable* by your rig;
-whether it is *sellable* on the Grid is decided by the price book and the
-on-chain model/recipe registry (see the main README's "Which models can earn").
+Note: a template being present does not prove readiness. The referenced nodes
+and weights must be installed and the graph must render successfully. Paid
+Grid availability also requires pricing, a reviewed recipe, and an enabled
+generation path (see the main README's "Which models can earn").
 
 ## How to Get a Workflow File
 
@@ -67,4 +68,4 @@ For the bridge to properly update your workflow, it should contain:
 3. An `EmptyLatentImage` node (for setting dimensions)
 4. A `SaveImage` node (for saving the output with the correct filename)
 
-The bridge will try to find these nodes by their class type, regardless of the node IDs used in your workflow. 
+The bridge will try to find these nodes by their class type, regardless of the node IDs used in your workflow.

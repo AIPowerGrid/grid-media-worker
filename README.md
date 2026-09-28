@@ -48,16 +48,18 @@ restrict that list, but it cannot make a missing workflow or checkpoint valid.
 
 ## Which models can earn
 
-Serving a model and selling it are separate gates. The Grid charges customers
-in USD per generation, and it only dispatches jobs for models that are listed
-in the public price book — `GET https://api.aipowergrid.io/v1/pricing` is the
-source of truth. A worker that advertises an unlisted model will register and
-show as online, but it can never receive a job or earn rewards; requests for
-such a model are rejected with `402 "model '<name>' has no image price"`.
+Serving a model and selling it are separate gates. Paid media generation needs
+a configured price; `GET https://api.aipowergrid.io/v1/pricing` publishes those
+rates and their aliases. A worker advertising an unpriced model may register,
+but that does not make it eligible for paid demand. Unpriced image requests
+are rejected before dispatch with `402 "model '<name>' has no image price"`.
+Pricing does not prove availability, an enabled generation path, or earnings.
 
 Currently priced media models: `flux.2 klein 4b fp8`, `krea 2 turbo`, and
-`z-image-turbo` for images, `ltx-2.3` for video, `trellis2` for 3D. Model-name
-matching is case-insensitive; the canonical ids are lowercase.
+`z-image-turbo` for images, `ltx-2.3` for video, `trellis2` for 3D. These are
+price-book keys, not necessarily dispatch names. Pricing matches names
+case-insensitively, but request routing can require the exact advertised name
+(for example, `FLUX.2 Klein 4B FP8`). Use `/v1/status/models` for dispatch names.
 
 **Listing another model.** The catalog is not closed. Image and video models
 are governed on-chain: the model's metadata lives in the Grid contract's
@@ -67,7 +69,7 @@ admins ([Discord](https://discord.gg/W9D8j6HCtC)) so the recipe can be
 reviewed, published on-chain, and priced. Until that happens the worker-side
 setup alone cannot make the model sellable.
 
-Discovery: `/v1/pricing` lists what is sellable, `/v1/status/models` lists
+Discovery: `/v1/pricing` lists configured rates, `/v1/status/models` lists
 what is online right now. `/v1/models` (the OpenAI-style list) contains text
 models only — image and video models never appear there. The legacy poll-based
 API from before the demand-billing launch is retired and answers `410 Gone`;
@@ -75,9 +77,9 @@ all submission goes through `/v1/*`.
 
 ## Serving a listed model: use GRID_PREFLIGHT
 
-For every currently sellable model, the workflow that actually runs your jobs
-is the grid's reviewed recipe, pushed with each job — the bridge executes it
-as-is, and local files in `workflows/` are never consulted for those jobs.
+For recipe-backed ComfyUI jobs, the workflow comes from the grid's reviewed
+recipe, pushed with the job. The bridge binds the job inputs into that graph;
+it does not substitute a local workflow for a supplied recipe.
 The right way to advertise such a model is therefore not the default local
 check (which needs a repo-shipped workflow file some models don't have) but
 **preflight**:
@@ -87,35 +89,38 @@ GRID_MODEL=Krea 2 Turbo
 GRID_PREFLIGHT=true
 ```
 
-On startup the bridge fetches the model's recipe from the grid
-(`GET /v1/models/<name>/recipe`), verifies every node type and weight file it
-needs exists in your ComfyUI, then smoke-runs the real graph with a tiny
-canary input and advertises the model only if that render completes. Failures
-are logged with the missing node or file by name. `GRID_TRUST_MODELS=true`
-skips all checking and is not recommended: the grid dispatches real paid jobs
-to whatever you advertise, and jobs that then fail collect strikes toward
-eviction.
+On startup the bridge fetches recipes from the grid
+(`GET /v1/models/<name>/recipe`) and checks the first returned recipe's declared
+node types and weight files against ComfyUI. It submits that graph with a
+small source image where declared, then waits for completion. This consumes
+local GPU time; it does not necessarily reduce the graph's resolution or steps.
+This is a startup smoke test, not qualification of every recipe, variant,
+output, or billing path. Failures are logged with the missing node or file.
+`GRID_TRUST_MODELS=true` bypasses the local workflow/weight admission check
+when preflight is disabled; runtime health and Core admission still apply.
+It is not recommended for public operators.
 
 ## Test your own worker end to end
 
 Submitting a test job costs real credit: fund the account at
 [console.aipowergrid.io](https://console.aipowergrid.io/dashboard/funding), or
-stay inside the free daily allowance ($0.01/day — one `flux.2 klein 4b fp8`
-image or three `z-image-turbo` images). With several workers serving the same
+use any daily allowance shown for your eligible account. Check current rates
+before submitting. Use a separate inference-capable key from the same account,
+not a restricted rig-only worker key. With several workers serving the same
 model, the Grid may route your job to someone else's GPU — pass the optional
 `worker` field, which accepts only a worker owned by your own account, to
 target your rig:
 
 ```bash
 curl -s https://api.aipowergrid.io/v1/images/generations \
-  -H "Content-Type: application/json" -H "apikey: $GRID_API_KEY" \
-  -d '{"model": "flux.2 klein 4b fp8", "prompt": "a lighthouse at sunset",
+  -H "Content-Type: application/json" -H "apikey: $GRID_INFERENCE_API_KEY" \
+  -d '{"model": "FLUX.2 Klein 4B FP8", "prompt": "a lighthouse at sunset",
        "n": 1, "worker": "your-worker-name"}'
 ```
 
-Keep `n` at 1 — multi-image batches are a separately gated generation path and
-currently return `503`. Watch the bridge console to confirm the job landed on
-your worker.
+Keep `n` at 1 for the initial test. Advanced generation paths may be disabled
+until their billing canaries pass; being listed or advertised does not enable
+them. Watch the bridge console to confirm the job landed on your worker.
 
 ## ComfyUI prerequisites
 
@@ -129,9 +134,9 @@ The bridge does not install or manage ComfyUI. Before starting it:
 - Weights are downloaded from Hugging Face (`.../resolve/main/<file>`) or
   Civitai; some repositories (the Flux family among them) are gated and need a
   free Hugging Face token to download.
-- Your NVIDIA driver must support the CUDA build bundled with your ComfyUI;
-  a driver that is too old crashes the first render, not the install (observed
-  on a test machine: torch cu130 required a 616-series driver).
+- Your NVIDIA driver must support the PyTorch/CUDA build used by ComfyUI.
+  Verify a local render before connecting; installation alone is not proof of
+  runtime compatibility.
 
 ## Windows setup (PowerShell)
 
@@ -141,22 +146,21 @@ The commands above are for Linux/macOS shells. On Windows:
 git clone https://github.com/AIPowerGrid/grid-media-worker.git
 cd grid-media-worker
 python -m venv .venv
-.venv\Scripts\Activate.ps1
-pip install -e .
+.venv\Scripts\python.exe -m pip install -e .
 Copy-Item .env.example .env
 ```
 
 Notes for a fresh machine:
 
-- If activation is blocked, run
-  `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once.
+- No activation or execution-policy change is needed. After configuring `.env`
+  and starting ComfyUI, run `.venv\Scripts\comfy-bridge.exe`.
 - Missing tools install with winget: `winget install --id Git.Git -e` and
   `winget install --id Python.Python.3.12 -e`. Open a **new** terminal
   afterwards — already-open shells keep the old `PATH` and will not find
   `git`/`python`.
-- Large browser downloads (ComfyUI portable) can stall as
-  `Unconfirmed *.crdownload` under SmartScreen; downloading with
-  `curl.exe -L -o <file> <url>` avoids it.
+- Use the official ComfyUI distribution and verify published checksums where
+  provided. Do not treat an incomplete browser download as a finished archive
+  or bypass a security warning simply to finish setup.
 
 ## Custom workflows
 
