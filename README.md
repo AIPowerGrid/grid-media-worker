@@ -73,6 +73,29 @@ models only — image and video models never appear there. The legacy poll-based
 API from before the demand-billing launch is retired and answers `410 Gone`;
 all submission goes through `/v1/*`.
 
+## Serving a listed model: use GRID_PREFLIGHT
+
+For every currently sellable model, the workflow that actually runs your jobs
+is the grid's reviewed recipe, pushed with each job — the bridge executes it
+as-is, and local files in `workflows/` are never consulted for those jobs.
+The right way to advertise such a model is therefore not the default local
+check (which needs a repo-shipped workflow file some models don't have) but
+**preflight**:
+
+```ini
+GRID_MODEL=Krea 2 Turbo
+GRID_PREFLIGHT=true
+```
+
+On startup the bridge fetches the model's recipe from the grid
+(`GET /v1/models/<name>/recipe`), verifies every node type and weight file it
+needs exists in your ComfyUI, then smoke-runs the real graph with a tiny
+canary input and advertises the model only if that render completes. Failures
+are logged with the missing node or file by name. `GRID_TRUST_MODELS=true`
+skips all checking and is not recommended: the grid dispatches real paid jobs
+to whatever you advertise, and jobs that then fail collect strikes toward
+eviction.
+
 ## Test your own worker end to end
 
 Submitting a test job costs real credit: fund the account at
