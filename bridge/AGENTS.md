@@ -30,6 +30,11 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   commitments, local hardware detection, and recommendation. Owned in its own
   AGENTS.md.
 - `utils.py` — seed + media encoding helpers. `cli.py` — console entry; launches the web app.
+- `image_output.py` - validates/re-encodes PNG, WebP, and JPEG outputs to match
+  signed upload content types; receipts hash the uploaded bytes.
+- `loras.py` - source/sink-checked recipe LoRA injection, local safetensors
+  resolution, and bounded CivitAI downloads. New downloads require a provider
+  SHA256 commitment plus safetensors validation and atomic file promotion.
 - `manager_cli.py` - `grid-media-manager` profile lifecycle, worker identity,
   runtime supervision, serve commands, and loopback manager-UI entry point.
 - `enrollment.py` - crash-resumable Console pairing. The candidate worker API
@@ -47,6 +52,17 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 ## Local Contracts
 
 - Keep transport payload adaptation in `ws_worker.py`, not `workflow.py`.
+- Requested recipe LoRAs must resolve and inject or the job fails before
+  rendering. Missing injection maps never silently drop a requested modifier.
+  The `done.loras` list reports filenames, not model-fidelity proof. Downloads
+  require explicit operator `LORA_DIR`, numeric IDs, approved HTTPS origins,
+  finite strengths, at most five adapters, and `LORA_MAX_DOWNLOAD_BYTES`.
+  `CIVITAI_TOKEN` is a header only on civitai.com, never a query parameter or
+  CDN credential. Existing operator-installed safetensors remain trusted local
+  inputs; this is not a validator certification of their contents.
+- Image bytes must decode and match the upload slot's content type. Convert
+  every image before uploading the first; format failures cannot be relabelled
+  as successful images. Audio/video bytes are unchanged.
 - Recipe image batching must include `EmptyFlux2LatentImage`, not only the
   older empty-latent classes. Preserve the input graph and verify exact output
   count before upload; this does not enable Core's public batch gate.

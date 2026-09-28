@@ -1,9 +1,12 @@
 import asyncio
+import hashlib
+import io
 from unittest.mock import AsyncMock
 
 import pytest
 import respx
 from httpx import Response
+from PIL import Image
 from eth_account import Account
 from eth_account.messages import encode_defunct
 
@@ -172,8 +175,10 @@ async def test_batch_requires_exact_outputs_before_any_upload(monkeypatch, tmp_p
     uploads = [respx_mock.put(f"https://storage.example/{i}").mock(return_value=Response(200)) for i in range(4)]
     worker, socket = WSWorker(), AsyncMock()
     monkeypatch.setattr(worker, "_relay_progress", AsyncMock())
+    png = io.BytesIO()
+    Image.new("RGB", (2, 2), "red").save(png, format="PNG")
     monkeypatch.setattr(worker, "_collect_outputs", AsyncMock(return_value=[
-        (f"image-{i}".encode(), "image", f"{i}.webp") for i in range(produced)]))
+        (png.getvalue(), "image", f"{i}.png") for i in range(produced)]))
     job = {
         "id": "batch-job", "model": "model", "job_type": "image",
         "payload": {"n": 4, "batch_size": 1, "seed": 20, "seeds": [20, 900, 0, 37], "recipe_engine": "comfyui", "recipe_spec": {
@@ -200,6 +205,10 @@ async def test_batch_requires_exact_outputs_before_any_upload(monkeypatch, tmp_p
         assert [g["3"]["inputs"]["noise_seed"] for g in graphs] == [20, 900, 0, 37]
         assert len({g["2"]["inputs"]["filename_prefix"] for g in graphs}) == 4
         assert all(route.call_count == 1 for route in uploads)
+        for result, route in zip(message["results"], uploads):
+            uploaded = route.calls.last.request.content
+            assert Image.open(io.BytesIO(uploaded)).format == "WEBP"
+            assert result["sha256"] == hashlib.sha256(uploaded).hexdigest()
     else:
         assert message["type"] == "error"
         assert all(not route.called for route in uploads)
@@ -239,6 +248,49 @@ async def test_batch_late_render_failure_uploads_nothing(monkeypatch, respx_mock
     assert render.await_count == 2
     assert all(not route.called for route in uploads)
     assert ws_worker_module.json.loads(socket.send.await_args.args[0])["type"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_requested_lora_without_injection_fails_before_render(monkeypatch):
+    worker, socket = WSWorker(), AsyncMock()
+    monkeypatch.setattr(ws_worker_module, "build_workflow", AsyncMock(return_value={}))
+    render = AsyncMock()
+    monkeypatch.setattr(worker, "_render_comfy", render)
+    try:
+        await worker._handle_job(socket, {"id": "missing-map", "model": "model", "job_type": "image",
+            "payload": {"loras": [{"name": "style"}]}, "upload": [{}]})
+    finally:
+        await worker.comfy.aclose()
+    render.assert_not_awaited()
+    assert ws_worker_module.json.loads(socket.send.await_args.args[0])["type"] == "error"
+
+
+@pytest.mark.asyncio
+@pytest.mark.respx(assert_all_called=False)
+async def test_lora_result_reports_loaded_names_and_hashes_encoded_bytes(monkeypatch, tmp_path, respx_mock):
+    monkeypatch.setattr(Settings, "GRID_WORKER_KEY_PATH", str(tmp_path / "absent-key"))
+    worker, socket = WSWorker(), AsyncMock()
+    monkeypatch.setattr(ws_worker_module, "build_workflow", AsyncMock(return_value={}))
+    injected = {"injected": True}
+    monkeypatch.setattr(ws_worker_module, "apply_recipe_loras", AsyncMock(return_value=(injected, ["style.safetensors"])))
+    png = io.BytesIO()
+    Image.new("RGB", (4, 4), "red").save(png, "PNG")
+    render = AsyncMock(return_value=[(png.getvalue(), "image", "a.png")])
+    monkeypatch.setattr(worker, "_render_comfy", render)
+    upload = respx_mock.put("https://storage.example/one").respond(200)
+    try:
+        await worker._handle_job(socket, {"id": "lora-job", "model": "model", "job_type": "image",
+            "payload": {"loras": [{"name": "style"}], "seed": 0},
+            "upload": [{"put_url": "https://storage.example/one", "content_type": "image/jpeg"}]})
+    finally:
+        await worker.comfy.aclose()
+    assert render.await_args.args[2] == injected
+    message = ws_worker_module.json.loads(socket.send.await_args.args[0])
+    assert message["type"] == "done"
+    assert message["loras"] == ["style.safetensors"]
+    data = upload.calls.last.request.content
+    assert Image.open(io.BytesIO(data)).format == "JPEG"
+    assert message["results"][0]["sha256"] == hashlib.sha256(data).hexdigest()
 
 
 @pytest.mark.asyncio
