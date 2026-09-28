@@ -162,7 +162,7 @@ async def test_job_error_does_not_expose_worker_exception_details(monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("produced", [0, 1, 4, 5])
+@pytest.mark.parametrize("produced", [0, 1, 2])
 @pytest.mark.respx(assert_all_called=False)
 async def test_batch_requires_exact_outputs_before_any_upload(monkeypatch, tmp_path, produced, respx_mock):
     monkeypatch.setattr(Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
@@ -176,9 +176,10 @@ async def test_batch_requires_exact_outputs_before_any_upload(monkeypatch, tmp_p
         (f"image-{i}".encode(), "image", f"{i}.webp") for i in range(produced)]))
     job = {
         "id": "batch-job", "model": "model", "job_type": "image",
-        "payload": {"n": 4, "batch_size": 1, "seed": 20, "recipe_engine": "comfyui", "recipe_spec": {
+        "payload": {"n": 4, "batch_size": 1, "seed": 20, "seeds": [20, 900, 0, 37], "recipe_engine": "comfyui", "recipe_spec": {
             "1": {"class_type": "EmptyLatentImage", "inputs": {"width": 512, "height": 512, "batch_size": 1}},
             "2": {"class_type": "SaveImage", "inputs": {"filename_prefix": "test", "images": ["1", 0]}},
+            "3": {"class_type": "RandomNoise", "inputs": {"noise_seed": 20}},
         }},
         "upload": [{"put_url": f"https://storage.example/{i}", "key": str(i), "content_type": "image/webp"} for i in range(4)],
     }
@@ -187,13 +188,17 @@ async def test_batch_requires_exact_outputs_before_any_upload(monkeypatch, tmp_p
     finally:
         await worker.comfy.aclose()
     graph = ws_worker_module.json.loads(prompt.calls.last.request.content)["prompt"]
-    assert graph["1"]["inputs"]["batch_size"] == 4
+    assert graph["1"]["inputs"]["batch_size"] == 1
     assert job["payload"]["batch_size"] == 1
     message = ws_worker_module.json.loads(socket.send.await_args.args[0])
-    if produced == 4:
+    assert job["payload"]["recipe_spec"]["3"]["inputs"]["noise_seed"] == 20
+    if produced == 1:
         assert message["type"] == "done"
         assert [r["index"] for r in message["results"]] == [0, 1, 2, 3]
-        assert [r["seed"] for r in message["results"]] == [20, 21, 22, 23]
+        assert [r["seed"] for r in message["results"]] == [20, 900, 0, 37]
+        graphs = [ws_worker_module.json.loads(call.request.content)["prompt"] for call in prompt.calls]
+        assert [g["3"]["inputs"]["noise_seed"] for g in graphs] == [20, 900, 0, 37]
+        assert len({g["2"]["inputs"]["filename_prefix"] for g in graphs}) == 4
         assert all(route.call_count == 1 for route in uploads)
     else:
         assert message["type"] == "error"
@@ -212,6 +217,27 @@ async def test_batch_rejects_wrong_upload_slot_count_before_render(monkeypatch, 
     finally:
         await worker.comfy.aclose()
     build.assert_not_awaited()
+    assert ws_worker_module.json.loads(socket.send.await_args.args[0])["type"] == "error"
+
+
+@pytest.mark.asyncio
+@pytest.mark.respx(assert_all_called=False)
+async def test_batch_late_render_failure_uploads_nothing(monkeypatch, respx_mock):
+    worker, socket = WSWorker(), AsyncMock()
+    monkeypatch.setattr(ws_worker_module, "build_workflow", AsyncMock(return_value={
+        "noise": {"class_type": "RandomNoise", "inputs": {"noise_seed": 1}},
+    }))
+    render = AsyncMock(side_effect=[[(b"first", "image", "first.png")], RuntimeError("second render failed")])
+    monkeypatch.setattr(worker, "_render_comfy", render)
+    uploads = [respx_mock.put(f"https://storage.example/{i}").mock(return_value=Response(200)) for i in range(2)]
+    try:
+        await worker._handle_job(socket, {"id": "late-fail", "model": "model", "job_type": "image",
+            "payload": {"n": 2, "seed": 1, "recipe_spec": {"present": True}},
+            "upload": [{"put_url": f"https://storage.example/{i}", "content_type": "image/png"} for i in range(2)]})
+    finally:
+        await worker.comfy.aclose()
+    assert render.await_count == 2
+    assert all(not route.called for route in uploads)
     assert ws_worker_module.json.loads(socket.send.await_args.args[0])["type"] == "error"
 
 

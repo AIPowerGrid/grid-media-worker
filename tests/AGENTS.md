@@ -20,6 +20,8 @@ and the WebSocket worker.
   authoritative `n` despite conflicting legacy `batch_size`, exact upload slots
   before rendering, and exact generated count before upload/signing; partial
   and extra outputs must not become a successful result.
+  Recipe batches also prove independent arbitrary seeds, unique output prefixes,
+  input preservation, and no uploads when a later render fails.
 - `test_model_mapper.py` - model-reference resolution, capability inventory,
   and retired-capability advertisement guards.
 - `test_worker_identity.py` - worker-key custody, payout-wallet delegation,
@@ -55,7 +57,10 @@ and the WebSocket worker.
 - `test_profile_state.py` - digest/signature/canary authority required before advertisement.
 - `test_workflow.py` - ComfyUI workflow mutation and parameter mapping.
 - `test_recipe_workflow.py` - Core-resolved recipe output materialization and
-  cache-busting contracts.
+  cache-busting contracts, plus batch-size binding for SD/SD3/Flux2 latent
+  nodes without modifying the supplied recipe.
+  Independent image-output binding rejects missing, linked, ambiguous seed
+  layouts and unsupported batch nodes rather than issuing misleading receipts.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
 
 ## Local Contracts

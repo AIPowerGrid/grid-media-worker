@@ -47,6 +47,15 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 ## Local Contracts
 
 - Keep transport payload adaptation in `ws_worker.py`, not `workflow.py`.
+- Recipe image batching must include `EmptyFlux2LatentImage`, not only the
+  older empty-latent classes. Preserve the input graph and verify exact output
+  count before upload; this does not enable Core's public batch gate.
+- Recipe image batches render independently at batch size one for each assigned
+  seed. Native ComfyUI batches consume one RNG stream and cannot truthfully be
+  labelled seed + index. Only graphs with one concrete RandomNoise, KSampler,
+  or KSamplerAdvanced seed and supported empty-latent batch nodes are accepted;
+  linked/ambiguous seed graphs fail closed. All outputs must finish before any
+  upload. Single outputs, video/audio, and legacy local templates are unchanged.
 - Grid `n` is the output-count authority and overrides the legacy `batch_size`
   adapter field. Upload slots must match before rendering. Rendered output count
   must match before any upload or signed `done`; partial or extra batches fail
