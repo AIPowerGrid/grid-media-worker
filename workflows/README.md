@@ -39,11 +39,18 @@ The bridge will automatically update the following values in your workflow:
 
 The repository includes several pre-made templates:
 
-- `sd15_workflow.json` - For Stable Diffusion 1.5
-- `sdxl_workflow.json` - For SDXL Base 1.0
-- `sdxl_turbo_workflow.json` - For SDXL Turbo (optimized parameters)
-- `turbovision.json` - For TurboVision XL
-- `sdxl-lightning.json` - For SDXL Lightning
+- `flux2_klein_4b_api.json` / `flux2_klein_4b_image_edit.json` - FLUX.2 Klein 4B (txt2img / img2img)
+- `flux1.dev.json` - FLUX.1 dev
+- `flux_kontext_dev_basic_api.json` - FLUX Kontext dev
+- `sdxl.json` / `sdxl1.json` - SDXL Base 1.0 (+ refiner)
+- `turbovision.json` - TurboVision XL
+- `Chroma_final.json` - Chroma
+- `wan2_2_t2v_14b.json` - Wan 2.2 text-to-video 14B
+
+Note: a template being present does not prove readiness. The referenced nodes
+and weights must be installed and the graph must render successfully. Paid
+Grid availability also requires pricing, a reviewed recipe, and an enabled
+generation path (see the main README's "Which models can earn").
 
 ## How to Get a Workflow File
 
@@ -61,4 +68,4 @@ For the bridge to properly update your workflow, it should contain:
 3. An `EmptyLatentImage` node (for setting dimensions)
 4. A `SaveImage` node (for saving the output with the correct filename)
 
-The bridge will try to find these nodes by their class type, regardless of the node IDs used in your workflow. 
+The bridge will try to find these nodes by their class type, regardless of the node IDs used in your workflow.

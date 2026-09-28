@@ -46,6 +46,139 @@ comfy-bridge
 The bridge advertises only models it can resolve and serve. `GRID_MODEL` can
 restrict that list, but it cannot make a missing workflow or checkpoint valid.
 
+## Which models can earn
+
+Serving a model and selling it are separate gates. Paid media generation needs
+a configured price; `GET https://api.aipowergrid.io/v1/pricing` publishes those
+rates and their aliases. A worker advertising an unpriced model may register,
+but that does not make it eligible for paid demand. Unpriced image requests
+are rejected before dispatch with `402 "model '<name>' has no image price"`.
+Pricing does not prove availability, an enabled generation path, or earnings.
+
+Currently priced media models: `flux.2 klein 4b fp8`, `krea 2 turbo`, and
+`z-image-turbo` for images, `ltx-2.3` for video, `trellis2` for 3D. These are
+price-book keys, not necessarily dispatch names. Pricing matches names
+case-insensitively, but request routing can require the exact advertised name
+(for example, `FLUX.2 Klein 4B FP8`). Use `/v1/status/models` for dispatch names.
+
+**Listing another model.** The catalog is not closed. Image and video models
+are governed on-chain: the model's metadata lives in the Grid contract's
+ModelVault and its reviewed ComfyUI workflow in the RecipeVault (Base
+mainnet). To serve a model that is not yet listed, contact the AI Power Grid
+admins ([Discord](https://discord.gg/W9D8j6HCtC)) so the recipe can be
+reviewed, published on-chain, and priced. Until that happens the worker-side
+setup alone cannot make the model sellable.
+
+Discovery: `/v1/pricing` lists configured rates, `/v1/status/models` lists
+what is online right now. `/v1/models` (the OpenAI-style list) contains text
+models only — image and video models never appear there. The legacy poll-based
+API from before the demand-billing launch is retired and answers `410 Gone`;
+all submission goes through `/v1/*`.
+
+## Serving a listed model: use GRID_PREFLIGHT
+
+For recipe-backed ComfyUI jobs, the workflow comes from the grid's reviewed
+recipe, pushed with the job. The bridge binds the job inputs into that graph;
+it does not substitute a local workflow for a supplied recipe.
+The right way to advertise such a model is therefore not the default local
+check (which needs a repo-shipped workflow file some models don't have) but
+**preflight**:
+
+```ini
+GRID_MODEL=Krea 2 Turbo
+GRID_PREFLIGHT=true
+```
+
+On startup the bridge fetches recipes from the grid
+(`GET /v1/models/<name>/recipe`) and checks the first returned recipe's declared
+node types and weight files against ComfyUI. It submits that graph with a
+small source image where declared, then waits for completion. This consumes
+local GPU time; it does not necessarily reduce the graph's resolution or steps.
+This is a startup smoke test, not qualification of every recipe, variant,
+output, or billing path. Failures are logged with the missing node or file.
+`GRID_TRUST_MODELS=true` bypasses the local workflow/weight admission check
+when preflight is disabled; runtime health and Core admission still apply.
+It is not recommended for public operators.
+
+## Test your own worker end to end
+
+Submitting a test job costs real credit: fund the account at
+[console.aipowergrid.io](https://console.aipowergrid.io/dashboard/funding), or
+use any daily allowance shown for your eligible account. Check current rates
+before submitting. Use a separate inference-capable key from the same account,
+not a restricted rig-only worker key. With several workers serving the same
+model, the Grid may route your job to someone else's GPU — pass the optional
+`worker` field, which accepts only a worker owned by your own account, to
+target your rig:
+
+```bash
+curl -s https://api.aipowergrid.io/v1/images/generations \
+  -H "Content-Type: application/json" -H "apikey: $GRID_INFERENCE_API_KEY" \
+  -d '{"model": "FLUX.2 Klein 4B FP8", "prompt": "a lighthouse at sunset",
+       "n": 1, "worker": "your-worker-name"}'
+```
+
+Keep `n` at 1 for the initial test. Advanced generation paths may be disabled
+until their billing canaries pass; being listed or advertised does not enable
+them. Watch the bridge console to confirm the job landed on your worker.
+
+## ComfyUI prerequisites
+
+The bridge does not install or manage ComfyUI. Before starting it:
+
+- ComfyUI must be running and reachable at `COMFYUI_URL` (default port 8188).
+- Model weights go in ComfyUI's own folders: `models/checkpoints/` for
+  checkpoints, plus `models/vae/`, `models/clip/` (text encoders), and
+  `models/loras/` where a workflow needs them. The bridge only advertises a
+  model when every file its workflow references is present.
+- Weights are downloaded from Hugging Face (`.../resolve/main/<file>`) or
+  Civitai; some repositories (the Flux family among them) are gated and need a
+  free Hugging Face token to download.
+- Your NVIDIA driver must support the PyTorch/CUDA build used by ComfyUI.
+  Verify a local render before connecting; installation alone is not proof of
+  runtime compatibility.
+
+## Windows setup (PowerShell)
+
+The commands above are for Linux/macOS shells. On Windows:
+
+```powershell
+git clone https://github.com/AIPowerGrid/grid-media-worker.git
+cd grid-media-worker
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -e .
+Copy-Item .env.example .env
+```
+
+Notes for a fresh machine:
+
+- No activation or execution-policy change is needed. After configuring `.env`
+  and starting ComfyUI, run `.venv\Scripts\comfy-bridge.exe`.
+- Missing tools install with winget: `winget install --id Git.Git -e` and
+  `winget install --id Python.Python.3.12 -e`. Open a **new** terminal
+  afterwards — already-open shells keep the old `PATH` and will not find
+  `git`/`python`.
+- Use the official ComfyUI distribution and verify published checksums where
+  provided. Do not treat an incomplete browser download as a finished archive
+  or bypass a security warning simply to finish setup.
+
+## Custom workflows
+
+Approved production recipes are pushed by Core with each job. For local
+workflow development, see [workflows/README.md](workflows/README.md) — it
+documents the API-format export, the `POSITIVE_PROMPT_PLACEHOLDER` /
+`NEGATIVE_PROMPT_PLACEHOLDER` contract, and the checker:
+
+```bash
+python check_connections.py workflows/your_workflow.json
+```
+
+## Local UI
+
+The bridge serves a status/settings page at `http://127.0.0.1:7860` while
+running (`BRIDGE_HOST`/`BRIDGE_PORT` to change it; it binds to loopback only —
+use an SSH tunnel for remote access).
+
 Capacity remains under the operator's control. Media registrations currently
 serve exactly one simultaneous job; `GRID_THREADS` must therefore remain `1`.
 `GRID_SCHEDULE` accepts at most 32 JSON windows in the operator's local time.
