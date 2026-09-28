@@ -55,7 +55,8 @@ and the WebSocket worker.
 - `test_profile_state.py` - digest/signature/canary authority required before advertisement.
 - `test_workflow.py` - ComfyUI workflow mutation and parameter mapping.
 - `test_recipe_workflow.py` - Core-resolved recipe output materialization and
-  cache-busting contracts.
+  cache-busting contracts, plus batch-size binding for SD/SD3/Flux2 latent
+  nodes without modifying the supplied recipe.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
 
 ## Local Contracts

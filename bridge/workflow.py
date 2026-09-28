@@ -71,7 +71,7 @@ async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) ->
         for node in workflow.values():
             if isinstance(node, dict):
                 ct = str(node.get("class_type", ""))
-                if "EmptyLatent" in ct or "EmptySD3" in ct:
+                if "EmptyLatent" in ct or "EmptySD3" in ct or ct == "EmptyFlux2LatentImage":
                     node.setdefault("inputs", {})["batch_size"] = batch
 
     if payload.get("recipe_lora_inject"):
