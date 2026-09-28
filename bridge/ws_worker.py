@@ -37,7 +37,13 @@ from .capacity import (
     validate_max_concurrency,
     validate_schedule,
 )
-from .model_mapper import get_grid_models, initialize_model_mapper, is_retired_model
+from .model_mapper import (
+    get_grid_models,
+    initialize_model_mapper,
+    is_retired_model,
+    model_mapper,
+)
+from .pricing_check import fetch_priced_model_names, unsellable_names
 try:
     from .model_mapper import is_servable
 except ImportError:  # older worker forks lack the servability gate — advertise as-is
@@ -49,6 +55,9 @@ logger = logging.getLogger(__name__)
 
 BRIDGE_AGENT = "comfy-bridge/ws:1"
 RECONNECT_DELAY_S = 5
+# How long to wait for ComfyUI's model scan on a cold start before giving the
+# candidate check its answer anyway (it may still legitimately fail).
+COMFY_MODELS_WAIT_S = 60
 RUNTIME_HEALTH_INTERVAL_S = 10
 CAPACITY_POLL_INTERVAL_S = 15
 RUNTIME_HEALTH_FAILURE_LIMIT = 3
@@ -252,6 +261,17 @@ class WSWorker:
             )
         else:
             await initialize_model_mapper(Settings.COMFYUI_URL)
+            # ComfyUI answers HTTP before its model scan finishes, so a first
+            # pass can see zero files and the whole startup used to abort with
+            # a red traceback, healing only via the supervisor's 5s retry.
+            # Wait calmly instead — but only when files matter: blind-trust
+            # advertising never checks files.
+            if not Settings.GRID_TRUST_MODELS:
+                deadline = time.monotonic() + COMFY_MODELS_WAIT_S
+                while not model_mapper.available_files and time.monotonic() < deadline:
+                    logger.info("Waiting for ComfyUI to finish loading its model list…")
+                    await asyncio.sleep(3)
+                    await initialize_model_mapper(Settings.COMFYUI_URL)
             await self._check_runtime_health()
         self.models = []
         for m in candidates:
@@ -278,6 +298,15 @@ class WSWorker:
                 "then restart. Candidates were: %s" % candidates
             )
         logger.info(f"WS worker advertising servable models: {self.models}")
+        for name in unsellable_names(
+            self.models, await fetch_priced_model_names(Settings.GRID_API_URL)
+        ):
+            logger.warning(
+                "Advertised model '%s' is not in the grid price book "
+                "(GET /v1/pricing) — it will register but receive no paid "
+                "jobs until an admin lists and prices it.",
+                name,
+            )
 
         while True:
             await self._wait_until_available()

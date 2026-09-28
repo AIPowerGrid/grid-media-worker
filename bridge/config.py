@@ -1,7 +1,15 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# The bridge's install directory (the cloned repo). Defaults derived from it —
+# the workflows/ folder and the model-reference checkout — must not depend on
+# which directory the operator happens to launch `comfy-bridge` from: a
+# cwd-relative default silently empties the workflow map and drops the model
+# reference when started from anywhere else.
+REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
 class Settings:
@@ -78,7 +86,7 @@ class Settings:
     # running worker can observe pause/schedule changes without being killed.
     GRID_CAPACITY_FILE = os.getenv("GRID_CAPACITY_FILE", "").strip()
     MAX_PIXELS = int(os.getenv("GRID_MAX_PIXELS", "20971520"))
-    WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", os.path.join(os.getcwd(), "workflows"))
+    WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", str(REPO_ROOT / "workflows"))
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
     GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")
     BATCH_SIZE = int(os.getenv("GRID_BATCH_SIZE", "4"))  # Native ComfyUI batch size
