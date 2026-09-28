@@ -7,6 +7,9 @@ and the WebSocket worker.
 
 ## Ownership
 
+- `test_operator_rough_edges.py` - cold-start inventory/discovery, portable
+  port-conflict diagnostics, install-relative defaults, advertised status, and
+  advisory price-book aliases/fetch failures.
 - `test_bridge_web.py` - legacy loopback bridge dashboard/settings rendering,
   same-origin and trusted-executable boundaries, URL/config validation, plus
   startup-failure supervision against the installed FastAPI/Starlette API.

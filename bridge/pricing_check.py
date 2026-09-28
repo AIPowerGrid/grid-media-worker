@@ -25,8 +25,15 @@ async def fetch_priced_model_names(grid_api_url: str, timeout: float = 5.0):
         async with httpx.AsyncClient(timeout=timeout) as client:
             r = await client.get(f"{base}/v1/pricing")
             r.raise_for_status()
-            models = (r.json().get("price_book", {}) or {}).get("models", [])
-            return {str(m.get("model", "")).lower() for m in models if m.get("model")}
+            book = r.json()["price_book"]
+            models = book["models"]
+            names = {m["model"].lower() for m in models}
+            aliases = book.get("aliases", {})
+            names.update(
+                alias.lower() for alias, target in aliases.items()
+                if target.lower() in names
+            )
+            return names
     except Exception as e:  # noqa: BLE001 — advisory only, never fatal
         logger.debug("price-book check skipped: %s", e)
         return None

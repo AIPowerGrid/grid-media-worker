@@ -66,6 +66,11 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 - Adding a model → mapping in `model_mapper.py` + graph under `../workflows/`; advertise only
   what resolves (root contract).
 - Config → add to `Settings`; do not scatter `os.getenv` elsewhere.
+- Legacy ComfyUI startup retries an empty weight inventory before selecting
+  automatic candidates. An empty inventory never authorizes registration.
+  Default workflows resolve relative to the installation; explicit paths win.
+- The startup pricing check is advisory, includes priced aliases, and stays
+  silent when the public price book cannot be read. It is not an admission gate.
 - Managed-profile mode requires an active signed profile, matching install
   state, and a passed runtime-specific canary. The profile's capabilities
   replace manual model/job-type declarations; direct ACE-Step readiness replaces

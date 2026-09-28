@@ -230,7 +230,7 @@ class WSWorker:
         # GRID_MODEL override too — a worker must never advertise a model whose
         # workflow is missing or whose weights aren't loaded in ComfyUI (that's
         # what made this box advertise LTX-2.3 and 502 every job).
-        candidates = Settings.GRID_MODELS or get_grid_models()
+        candidates = list(Settings.GRID_MODELS)
         if Settings.GRID_PROFILE_PATH:
             from .profiles.advertisement import load_profile_advertisement
             from .profiles.profile import load_profile
@@ -243,10 +243,6 @@ class WSWorker:
             self.job_types = list(advertisement.job_types)
             self.profile_metadata = dict(advertisement.metadata)
             self.profile = dict(load_profile(Settings.GRID_PROFILE_PATH).profile)
-        retired = [model for model in candidates if is_retired_model(model)]
-        if retired:
-            logger.warning("Refusing retired model claim(s): %s", retired)
-            candidates = [model for model in candidates if not is_retired_model(model)]
         direct_audio = bool(
             self.profile and self.profile["runtime"]["adapter"] == "ace-step-1.5-api"
         )
@@ -273,6 +269,14 @@ class WSWorker:
                     await asyncio.sleep(3)
                     await initialize_model_mapper(Settings.COMFYUI_URL)
             await self._check_runtime_health()
+        # Automatic discovery needs the freshly initialized inventory, including
+        # files that appeared during the cold-start wait.
+        if not Settings.GRID_PROFILE_PATH and not Settings.GRID_MODELS:
+            candidates = get_grid_models()
+        retired = [model for model in candidates if is_retired_model(model)]
+        if retired:
+            logger.warning("Refusing retired model claim(s): %s", retired)
+            candidates = [model for model in candidates if not is_retired_model(model)]
         self.models = []
         for m in candidates:
             if direct_audio:
