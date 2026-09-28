@@ -50,6 +50,8 @@ except ImportError:  # older worker forks lack the servability gate — advertis
     def is_servable(_m):
         return (True, "")
 from .workflow import build_workflow, recipe_image_output
+from .image_output import encode_image_output
+from .loras import apply_recipe_loras
 
 logger = logging.getLogger(__name__)
 
@@ -512,6 +514,7 @@ class WSWorker:
 
         job_type = msg.get("job_type", "image")
         started_at = time.time()
+        loaded_loras = []
         if job_type == "audio":
             if not self.profile:
                 raise RuntimeError("audio jobs require an active signed worker profile")
@@ -530,6 +533,10 @@ class WSWorker:
             media_items = [(generated.content, "audio", generated.filename)]
         else:
             workflow = await build_workflow(bridge_job)
+            if payload.get("loras"):
+                workflow, loaded_loras = await apply_recipe_loras(
+                    self.comfy, workflow, payload.get("recipe_lora_inject"), payload["loras"],
+                )
             if job_type == "image" and n > 1 and payload.get("recipe_spec"):
                 graphs = [recipe_image_output(workflow, seed, i) for i, seed in enumerate(seeds)]
                 media_items = []
@@ -547,9 +554,13 @@ class WSWorker:
             )
 
         # Validate the full batch before uploading or signing any result.
+        encoded_items = [
+            encode_image_output(data, upload_slots[i]["content_type"]) if kind == "image" else data
+            for i, (data, kind, _filename) in enumerate(media_items)
+        ]
         results = []
         async with httpx.AsyncClient(timeout=120) as client:
-            for i, (media_bytes, media_type, filename) in enumerate(media_items):
+            for i, media_bytes in enumerate(encoded_items):
                 slot = upload_slots[i]
                 r = await client.put(
                     slot["put_url"], content=media_bytes,
@@ -568,6 +579,8 @@ class WSWorker:
 
         recipe_root = payload.get("recipe_root") if job_type == "audio" else None
         done = {"type": "done", "id": job_id, "results": results}
+        if loaded_loras:
+            done["loras"] = loaded_loras
         if recipe_root:
             done["recipe_root"] = recipe_root
         if os.path.exists(Settings.GRID_WORKER_KEY_PATH):

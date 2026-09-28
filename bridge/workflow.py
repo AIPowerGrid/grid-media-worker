@@ -106,11 +106,6 @@ async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) ->
                 if "EmptyLatent" in ct or "EmptySD3" in ct or ct == "EmptyFlux2LatentImage":
                     node.setdefault("inputs", {})["batch_size"] = batch
 
-    if payload.get("recipe_lora_inject"):
-        # LoRA splicing on the recipe path is a follow-up; warn rather than silently drop.
-        print("[recipe] WARNING: recipe_lora_inject present but LoRA splicing not yet "
-              "implemented on the recipe path — running without LoRAs")
-
     print(f"[recipe] executing {str(payload.get('recipe_root',''))[:12]} "
           f"(engine={payload.get('recipe_engine')}) job {job_id}")
     return workflow

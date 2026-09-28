@@ -56,6 +56,11 @@ and the WebSocket worker.
   second credential.
 - `test_profile_state.py` - digest/signature/canary authority required before advertisement.
 - `test_workflow.py` - ComfyUI workflow mutation and parameter mapping.
+- `test_loras.py` - recipe injection/source preservation, unsafe names/strengths,
+  missing maps, local resolution, bounded/hash-verified safetensors downloads,
+  atomic cleanup, redirect origins, and credential separation from CDN requests.
+- `test_image_output.py` - PNG/WebP/JPEG conversion and fail-closed invalid data.
+  WebSocket tests prove uploaded-byte receipts and loaded-LoRA reporting.
 - `test_recipe_workflow.py` - Core-resolved recipe output materialization and
   cache-busting contracts, plus batch-size binding for SD/SD3/Flux2 latent
   nodes without modifying the supplied recipe.

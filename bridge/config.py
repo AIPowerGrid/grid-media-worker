@@ -88,6 +88,9 @@ class Settings:
     MAX_PIXELS = int(os.getenv("GRID_MAX_PIXELS", "20971520"))
     WORKFLOW_DIR = os.getenv("WORKFLOW_DIR", str(REPO_ROOT / "workflows"))
     WORKFLOW_FILE = os.getenv("WORKFLOW_FILE", None)
+    LORA_DIR = os.getenv("LORA_DIR", "").strip()
+    CIVITAI_TOKEN = os.getenv("CIVITAI_TOKEN", "").strip()
+    LORA_MAX_DOWNLOAD_BYTES = int(os.getenv("LORA_MAX_DOWNLOAD_BYTES", str(1024**3)))
     GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH = os.getenv("GRID_IMAGE_MODEL_REFERENCE_REPOSITORY_PATH")
     BATCH_SIZE = int(os.getenv("GRID_BATCH_SIZE", "4"))  # Native ComfyUI batch size
 
