@@ -61,13 +61,15 @@ price-book keys, not necessarily dispatch names. Pricing matches names
 case-insensitively, but request routing can require the exact advertised name
 (for example, `FLUX.2 Klein 4B FP8`). Use `/v1/status/models` for dispatch names.
 
-**Listing another model.** The catalog is not closed. Image and video models
-are governed on-chain: the model's metadata lives in the Grid contract's
-ModelVault and its reviewed ComfyUI workflow in the RecipeVault (Base
-mainnet). To serve a model that is not yet listed, contact the AI Power Grid
-admins ([Discord](https://discord.gg/W9D8j6HCtC)) so the recipe can be
-reviewed, published on-chain, and priced. Until that happens the worker-side
-setup alone cannot make the model sellable.
+**Listing another model.** The catalog is reviewed, not closed. Core loads
+curated local recipes and can separately enable verified RecipeVault sync on
+Base. The existence of ModelVault/RecipeVault contracts does not mean every
+live model is admitted through on-chain enforcement. To propose a model,
+contact the AI Power Grid maintainer
+([Discord](https://discord.gg/W9D8j6HCtC)) with the model/license, workflow,
+required nodes and weights, and tested hardware. The recipe, price, and
+generation path need review; chain-governed recipes also need their updated
+commitments published. Worker-side setup alone cannot make a model sellable.
 
 Discovery: `/v1/pricing` lists configured rates, `/v1/status/models` lists
 what is online right now. `/v1/models` (the OpenAI-style list) contains text
@@ -121,6 +123,11 @@ curl -s https://api.aipowergrid.io/v1/images/generations \
 Keep `n` at 1 for the initial test. Advanced generation paths may be disabled
 until their billing canaries pass; being listed or advertised does not enable
 them. Watch the bridge console to confirm the job landed on your worker.
+
+Account administration belongs in the signed-in console. Inference credentials
+are not a substitute for an account-management session; account reads may omit
+linked-identity details and other API keys. A restricted rig key uses the
+worker self-status/setup-canary endpoints, not the account profile.
 
 ## ComfyUI prerequisites
 
