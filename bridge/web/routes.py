@@ -206,9 +206,15 @@ async def dashboard(request: Request):
 
 @app.get("/api/status")
 async def api_status():
+    # What the worker actually announced to the grid — GRID_MODELS is only the
+    # operator's *requested* list (often empty under auto-detect), so echoing
+    # it alone showed "models: []" on a worker advertising seven names.
+    bridge = worker_state.get("bridge")
+    advertised = list(getattr(bridge, "models", []) or []) if bridge is not None else []
     return {
         "worker_running": worker_state["running"],
         "worker_error": worker_state.get("error"),
+        "advertised": advertised,
         "config": {
             "has_api_key": bool(Settings.GRID_API_KEY),
             "worker_name": Settings.GRID_WORKER_NAME,

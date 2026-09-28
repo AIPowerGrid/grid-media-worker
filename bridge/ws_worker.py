@@ -37,7 +37,13 @@ from .capacity import (
     validate_max_concurrency,
     validate_schedule,
 )
-from .model_mapper import get_grid_models, initialize_model_mapper, is_retired_model
+from .model_mapper import (
+    get_grid_models,
+    initialize_model_mapper,
+    is_retired_model,
+    model_mapper,
+)
+from .pricing_check import fetch_priced_model_names, unsellable_names
 try:
     from .model_mapper import is_servable
 except ImportError:  # older worker forks lack the servability gate — advertise as-is
@@ -49,6 +55,9 @@ logger = logging.getLogger(__name__)
 
 BRIDGE_AGENT = "comfy-bridge/ws:1"
 RECONNECT_DELAY_S = 5
+# How long to wait for ComfyUI's model scan on a cold start before giving the
+# candidate check its answer anyway (it may still legitimately fail).
+COMFY_MODELS_WAIT_S = 60
 RUNTIME_HEALTH_INTERVAL_S = 10
 CAPACITY_POLL_INTERVAL_S = 15
 RUNTIME_HEALTH_FAILURE_LIMIT = 3
@@ -221,7 +230,7 @@ class WSWorker:
         # GRID_MODEL override too — a worker must never advertise a model whose
         # workflow is missing or whose weights aren't loaded in ComfyUI (that's
         # what made this box advertise LTX-2.3 and 502 every job).
-        candidates = Settings.GRID_MODELS or get_grid_models()
+        candidates = list(Settings.GRID_MODELS)
         if Settings.GRID_PROFILE_PATH:
             from .profiles.advertisement import load_profile_advertisement
             from .profiles.profile import load_profile
@@ -234,10 +243,6 @@ class WSWorker:
             self.job_types = list(advertisement.job_types)
             self.profile_metadata = dict(advertisement.metadata)
             self.profile = dict(load_profile(Settings.GRID_PROFILE_PATH).profile)
-        retired = [model for model in candidates if is_retired_model(model)]
-        if retired:
-            logger.warning("Refusing retired model claim(s): %s", retired)
-            candidates = [model for model in candidates if not is_retired_model(model)]
         direct_audio = bool(
             self.profile and self.profile["runtime"]["adapter"] == "ace-step-1.5-api"
         )
@@ -252,7 +257,26 @@ class WSWorker:
             )
         else:
             await initialize_model_mapper(Settings.COMFYUI_URL)
+            # ComfyUI answers HTTP before its model scan finishes, so a first
+            # pass can see zero files and the whole startup used to abort with
+            # a red traceback, healing only via the supervisor's 5s retry.
+            # Wait calmly instead — but only when files matter: blind-trust
+            # advertising never checks files.
+            if not Settings.GRID_TRUST_MODELS:
+                deadline = time.monotonic() + COMFY_MODELS_WAIT_S
+                while not model_mapper.available_files and time.monotonic() < deadline:
+                    logger.info("Waiting for ComfyUI to finish loading its model list…")
+                    await asyncio.sleep(3)
+                    await initialize_model_mapper(Settings.COMFYUI_URL)
             await self._check_runtime_health()
+        # Automatic discovery needs the freshly initialized inventory, including
+        # files that appeared during the cold-start wait.
+        if not Settings.GRID_PROFILE_PATH and not Settings.GRID_MODELS:
+            candidates = get_grid_models()
+        retired = [model for model in candidates if is_retired_model(model)]
+        if retired:
+            logger.warning("Refusing retired model claim(s): %s", retired)
+            candidates = [model for model in candidates if not is_retired_model(model)]
         self.models = []
         for m in candidates:
             if direct_audio:
@@ -278,6 +302,15 @@ class WSWorker:
                 "then restart. Candidates were: %s" % candidates
             )
         logger.info(f"WS worker advertising servable models: {self.models}")
+        for name in unsellable_names(
+            self.models, await fetch_priced_model_names(Settings.GRID_API_URL)
+        ):
+            logger.warning(
+                "Advertised model '%s' is not in the grid price book "
+                "(GET /v1/pricing) — it will register but receive no paid "
+                "jobs until an admin lists and prices it.",
+                name,
+            )
 
         while True:
             await self._wait_until_available()

@@ -48,6 +48,16 @@ async def _run_worker():
             except asyncio.CancelledError:
                 logger.info("Worker task cancelled.")
                 raise
+            except RuntimeError as e:
+                # Our own authored startup conditions ("No servable models…",
+                # "Registration rejected…") — a full traceback here reads as a
+                # crash to a first-time operator when it's a plain, retryable
+                # state. Unexpected exceptions below still get the traceback.
+                logger.error(
+                    "%s — retrying in %ss", e, WORKER_START_RETRY_SECONDS
+                )
+                worker_state["running"] = False
+                worker_state["error"] = "Worker unavailable; retrying"
             except Exception:
                 logger.exception(
                     "Worker startup failed; retrying in %ss",

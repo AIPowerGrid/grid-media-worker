@@ -3,7 +3,7 @@ import json
 import os
 from typing import Dict, List, Optional
 
-from .config import Settings
+from .config import REPO_ROOT, Settings
 
 # File extensions that denote a model weight in a ComfyUI loader combo-box.
 MODEL_EXTS = (".safetensors", ".ckpt", ".gguf", ".pt", ".pth", ".bin", ".sft")
@@ -186,8 +186,16 @@ class ModelMapper:
             else:
                 if root.lower().endswith(".json"):
                     location = root
+                elif root:
+                    location = os.path.join(root, "stable_diffusion.json")
                 else:
-                    location = os.path.join(root or "grid-image-model-reference", "stable_diffusion.json")
+                    # No explicit path: prefer the checkout next to the bridge
+                    # install so the reference loads regardless of the launch
+                    # directory; fall back to the historical cwd-relative spot
+                    # for setups that cloned it into their working directory.
+                    installed = str(REPO_ROOT / "grid-image-model-reference" / "stable_diffusion.json")
+                    legacy = os.path.join("grid-image-model-reference", "stable_diffusion.json")
+                    location = installed if os.path.exists(installed) else legacy
 
             # Load JSON from the decided location
             if is_url:
