@@ -49,7 +49,7 @@ try:
 except ImportError:  # older worker forks lack the servability gate — advertise as-is
     def is_servable(_m):
         return (True, "")
-from .workflow import build_workflow
+from .workflow import build_workflow, recipe_image_output
 
 logger = logging.getLogger(__name__)
 
@@ -530,22 +530,16 @@ class WSWorker:
             media_items = [(generated.content, "audio", generated.filename)]
         else:
             workflow = await build_workflow(bridge_job)
-            resp = await self.comfy.post("/prompt", json={"prompt": workflow})
-            if resp.status_code != 200:
-                raise RuntimeError(f"ComfyUI rejected workflow: {resp.text[:200]}")
-            prompt_id = resp.json().get("prompt_id")
-            if not prompt_id:
-                raise RuntimeError("No prompt_id from ComfyUI")
-
-            progress_task = asyncio.create_task(self._relay_progress(ws, job_id, prompt_id))
-            try:
-                media_items = await self._collect_outputs(prompt_id, job_type, started_at)
-            finally:
-                progress_task.cancel()
-                try:
-                    await progress_task
-                except (asyncio.CancelledError, Exception):
-                    pass
+            if job_type == "image" and n > 1 and payload.get("recipe_spec"):
+                graphs = [recipe_image_output(workflow, seed, i) for i, seed in enumerate(seeds)]
+                media_items = []
+                for graph in graphs:
+                    output = await self._render_comfy(ws, job_id, graph, job_type, started_at)
+                    if len(output) != 1:
+                        raise RuntimeError("Individual batch render did not return exactly one output")
+                    media_items.extend(output)
+            else:
+                media_items = await self._render_comfy(ws, job_id, workflow, job_type, started_at)
 
         if len(media_items) != n:
             raise RuntimeError(
@@ -585,6 +579,24 @@ class WSWorker:
                 media_result_hash(results, recipe_root),
             )
         await ws.send(json.dumps(done))
+
+    async def _render_comfy(self, ws, job_id, workflow, job_type, started_at):
+        resp = await self.comfy.post("/prompt", json={"prompt": workflow})
+        if resp.status_code != 200:
+            raise RuntimeError(f"ComfyUI rejected workflow: {resp.text[:200]}")
+        prompt_id = resp.json().get("prompt_id")
+        if not prompt_id:
+            raise RuntimeError("No prompt_id from ComfyUI")
+
+        progress_task = asyncio.create_task(self._relay_progress(ws, job_id, prompt_id))
+        try:
+            return await self._collect_outputs(prompt_id, job_type, started_at)
+        finally:
+            progress_task.cancel()
+            try:
+                await progress_task
+            except (asyncio.CancelledError, Exception):
+                pass
 
     async def _collect_outputs(self, prompt_id: str, job_type: str = "image", started_at: float = 0.0):
         """Poll ComfyUI history until the prompt finishes; return its outputs.

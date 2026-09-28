@@ -11,6 +11,38 @@ from .config import Settings
 MAX_SOURCE_IMAGE_BYTES = 12 * 1024 * 1024
 
 
+def recipe_image_output(workflow: Dict[str, Any], seed: int, index: int) -> Dict[str, Any]:
+    """Materialize one independently seeded image from a supported recipe.
+
+    ComfyUI native batches consume one RNG stream, not seed + output index.
+    Complex/linked seed graphs need explicit support rather than guessed receipts.
+    """
+    graph = copy.deepcopy(workflow)
+    seed_fields = {"RandomNoise": "noise_seed", "KSampler": "seed", "KSamplerAdvanced": "noise_seed"}
+    targets = []
+    for node in graph.values():
+        if not isinstance(node, dict):
+            continue
+        inputs = node.get("inputs", {})
+        kind = node.get("class_type")
+        field = seed_fields.get(kind)
+        if field:
+            if type(inputs.get(field)) is not int:
+                raise RuntimeError("Image batch requires a concrete recipe seed")
+            targets.append((inputs, field))
+        if "batch_size" in inputs:
+            if kind not in {"EmptyLatentImage", "EmptySD3LatentImage", "EmptyFlux2LatentImage"}:
+                raise RuntimeError("Image batch contains an unsupported batch-size node")
+            inputs["batch_size"] = 1
+        if "filename_prefix" in inputs:
+            inputs["filename_prefix"] = f"{inputs['filename_prefix']}_{index}"
+    if len(targets) != 1:
+        raise RuntimeError("Image batch requires exactly one supported recipe seed node")
+    inputs, field = targets[0]
+    inputs[field] = seed
+    return graph
+
+
 def _set_graph_path(spec: Dict[str, Any], path: str, value: Any) -> None:
     """Set a value at a dotted ComfyUI graph path like '81.inputs.image'.
 
