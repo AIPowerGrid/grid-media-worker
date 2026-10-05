@@ -42,6 +42,42 @@ def main():
         level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
     )
 
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="comfy-bridge",
+        description="AI Power Grid media worker bridge for ComfyUI.",
+    )
+    parser.add_argument(
+        "--install-service", action="store_true",
+        help="start the bridge automatically (Windows login / systemd / launchd)",
+    )
+    parser.add_argument(
+        "--uninstall-service", action="store_true",
+        help="remove the auto-start installation",
+    )
+    parser.add_argument(
+        "--service-status", action="store_true",
+        help="show whether auto-start is installed",
+    )
+    args = parser.parse_args()
+
+    if args.service_status:
+        from . import service
+        service.status()
+        sys.exit(0)
+    if args.uninstall_service:
+        from . import service
+        sys.exit(0 if service.uninstall() else 1)
+    if args.install_service:
+        from . import service
+        ok = service.install(start=True)
+        if ok and sys.platform == "win32":
+            # The Run key alone only fires at the NEXT login — also start the
+            # bridge now, after a short delay in case a bridge is exiting.
+            service.schedule_start()
+        sys.exit(0 if ok else 1)
+
     import uvicorn
     from .config import Settings
     from .web.app import app  # noqa: F401 — triggers route registration
