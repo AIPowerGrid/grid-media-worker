@@ -129,9 +129,10 @@ async def test_cold_start_discovers_models_after_inventory(monkeypatch, ready):
             assert worker.models == ["test-model"]
             session.assert_awaited_once()
         else:
-            # Empty inventory now reads as "ComfyUI isn't there yet", not as a
-            # generic no-servable-models failure (the service-boot state).
-            with pytest.raises(RuntimeError, match="Waiting for ComfyUI"):
+            # Empty inventory with a PASSING health check reads as "ComfyUI
+            # is up but has no model files", distinct from both "not running"
+            # and the genuine no-servable-models failure.
+            with pytest.raises(RuntimeError, match="no model files installed"):
                 await worker.run()
             session.assert_not_awaited()
     finally:

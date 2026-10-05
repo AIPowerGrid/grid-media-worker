@@ -45,10 +45,33 @@ async def test_comfyui_down_raises_authored_waiting_message(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_supervisor_surfaces_authored_message_in_status(monkeypatch):
-    """The dashboard's worker_error must carry the real waiting message, not a
-    generic 'unavailable' — it is the only signal an operator gets at login."""
-    message = "Waiting for ComfyUI at http://127.0.0.1:8188 — it is not running yet"
+@pytest.mark.parametrize(
+    "exc_factory, expected",
+    [
+        # Authored startup states reach the dashboard verbatim…
+        (
+            lambda ws: ws.StartupPending(
+                "Waiting for ComfyUI at http://127.0.0.1:8188 — it is not running"
+            ),
+            "Waiting for ComfyUI at http://127.0.0.1:8188 — it is not running",
+        ),
+        # …but raw runtime error text (e.g. an ACE-Step readiness failure that
+        # interpolates the underlying exception) never does.
+        (
+            lambda ws: RuntimeError(
+                "ACE-Step readiness check failed: ConnectError('boom')"
+            ),
+            "Worker unavailable; retrying",
+        ),
+    ],
+)
+async def test_supervisor_surfaces_only_authored_messages(
+    monkeypatch, exc_factory, expected
+):
+    """worker_error must carry StartupPending messages verbatim — the only
+    signal an operator gets at login — and stay generic for everything else."""
+    import bridge.ws_worker as ws
+
     seen = asyncio.Event()
 
     class FakeComfy:
@@ -59,22 +82,43 @@ async def test_supervisor_surfaces_authored_message_in_status(monkeypatch):
         comfy = FakeComfy()
 
         async def run(self):
-            raise RuntimeError(message)
+            raise exc_factory(ws)
 
     monkeypatch.setattr(web_app, "WORKER_START_RETRY_SECONDS", 0)
-    import bridge.ws_worker as ws
-
     monkeypatch.setattr(ws, "WSWorker", lambda: FakeWorker())
-
-    original_sleep = asyncio.sleep
 
     async def stop_after_first(_delay):
         seen.set()
         raise asyncio.CancelledError
 
     monkeypatch.setattr(web_app.asyncio, "sleep", stop_after_first)
+    monkeypatch.setitem(web_app.worker_state, "error", None)
     with pytest.raises(asyncio.CancelledError):
         await web_app._run_worker()
     assert seen.is_set()
-    assert web_app.worker_state["error"] == message
-    await original_sleep(0)
+    assert web_app.worker_state["error"] == expected
+
+
+@pytest.mark.asyncio
+async def test_unservable_candidates_keep_the_no_servable_message(monkeypatch):
+    """Inventory present but nothing qualifies → the genuine 'No servable
+    models' guidance, not a ComfyUI-waiting message."""
+    import bridge.ws_worker as ws
+
+    monkeypatch.setattr(Settings, "GRID_PROFILE_PATH", "")
+    monkeypatch.setattr(Settings, "GRID_MODELS", [])
+    monkeypatch.setattr(Settings, "GRID_PREFLIGHT", False)
+    monkeypatch.setattr(Settings, "GRID_TRUST_MODELS", False)
+    monkeypatch.setattr(Settings, "GRID_SCHEDULE", "")
+    monkeypatch.setattr(Settings, "THREADS", 1)
+    monkeypatch.setattr(ws.model_mapper, "available_files", {"present.safetensors"})
+    monkeypatch.setattr(ws, "initialize_model_mapper", AsyncMock())
+    monkeypatch.setattr(ws, "get_grid_models", lambda: ["some-model"])
+    monkeypatch.setattr(ws, "is_servable", lambda m: (False, "workflow file missing"))
+    worker = ws.WSWorker()
+    monkeypatch.setattr(worker, "_check_runtime_health", AsyncMock())
+    try:
+        with pytest.raises(ws.StartupPending, match="No servable models"):
+            await worker.run()
+    finally:
+        await worker.comfy.aclose()

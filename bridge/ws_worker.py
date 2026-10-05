@@ -60,6 +60,14 @@ RECONNECT_DELAY_S = 5
 # How long to wait for ComfyUI's model scan on a cold start before giving the
 # candidate check its answer anyway (it may still legitimately fail).
 COMFY_MODELS_WAIT_S = 60
+
+
+class StartupPending(RuntimeError):
+    """A retryable startup state whose message was AUTHORED for the operator.
+
+    The supervisor shows str(exc) of THIS type on the dashboard/status; any
+    other exception gets a generic message, so raw library or runtime error
+    text (e.g. an ACE-Step readiness failure) never reaches the UI verbatim."""
 RUNTIME_HEALTH_INTERVAL_S = 10
 CAPACITY_POLL_INTERVAL_S = 15
 RUNTIME_HEALTH_FAILURE_LIMIT = 3
@@ -273,13 +281,13 @@ class WSWorker:
             try:
                 await self._check_runtime_health()
             except (httpx.HTTPError, OSError) as exc:
-                # ComfyUI not reachable at all — the normal state right after
-                # login under an auto-started service. Authored message, no
-                # traceback; the supervisor retries until ComfyUI appears.
-                raise RuntimeError(
+                # ComfyUI not reachable (or not answering healthily) — the
+                # normal state right after login under an auto-started service.
+                # Authored message, no traceback; the supervisor retries.
+                raise StartupPending(
                     f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
-                    f"not running yet ({type(exc).__name__}); the worker will "
-                    "keep checking"
+                    f"not running or not responding yet ({type(exc).__name__});"
+                    " the worker will keep checking"
                 ) from exc
         # Automatic discovery needs the freshly initialized inventory, including
         # files that appeared during the cold-start wait.
@@ -308,18 +316,19 @@ class WSWorker:
             else:
                 logger.warning(f"Refusing to advertise '{m}': {reason}")
         if not self.models:
-            # Separate "ComfyUI isn't there yet" from "ComfyUI is fine but
-            # nothing qualifies": under an auto-started service the first is
-            # the normal state at login, and the operator needs to see which
-            # one they are in (the supervisor shows this message on the
-            # dashboard and keeps retrying).
+            # Three distinct operator states, each with its own authored
+            # message (the supervisor shows it on the dashboard and retries):
+            # reaching here means the health check PASSED, so an empty
+            # inventory is "ComfyUI is up but has no model files", not
+            # "ComfyUI is not running".
             if not direct_audio and not model_mapper.available_files:
-                raise RuntimeError(
-                    f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
-                    "not running or has not finished loading models yet; the "
-                    "worker will keep checking"
+                raise StartupPending(
+                    f"ComfyUI at {Settings.COMFYUI_URL} is running but has no "
+                    "model files installed yet — add weights to ComfyUI's "
+                    "models folders (checkpoints, vae, …); the worker will "
+                    "keep checking"
                 )
-            raise RuntimeError(
+            raise StartupPending(
                 "No servable models — every candidate is missing its workflow or "
                 "ComfyUI weights. Install the model files (and a mapped workflow), "
                 "then restart. Candidates were: %s" % candidates

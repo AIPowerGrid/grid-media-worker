@@ -49,19 +49,25 @@ async def _run_worker():
                 logger.info("Worker task cancelled.")
                 raise
             except RuntimeError as e:
-                # Our own authored startup conditions ("No servable models…",
-                # "Registration rejected…") — a full traceback here reads as a
-                # crash to a first-time operator when it's a plain, retryable
-                # state. Unexpected exceptions below still get the traceback.
+                # Authored, retryable startup conditions — a full traceback
+                # here reads as a crash to a first-time operator when it's a
+                # plain state. Unexpected exceptions below keep the traceback.
                 logger.error(
                     "%s — retrying in %ss", e, WORKER_START_RETRY_SECONDS
                 )
                 worker_state["running"] = False
-                # Authored startup messages are written for the operator —
-                # show the real one on the dashboard instead of a generic
-                # "unavailable" (an auto-started bridge waiting for ComfyUI
-                # must say so at 127.0.0.1:7860).
-                worker_state["error"] = str(e)
+                # Only StartupPending messages are authored FOR the dashboard
+                # (an auto-started bridge waiting for ComfyUI must say so at
+                # 127.0.0.1:7860). Other RuntimeErrors — e.g. an ACE-Step
+                # readiness failure interpolating raw exception text — stay
+                # generic on the UI, per the stable-error-classes contract.
+                from ..ws_worker import StartupPending
+
+                worker_state["error"] = (
+                    str(e)
+                    if isinstance(e, StartupPending)
+                    else "Worker unavailable; retrying"
+                )
             except Exception:
                 logger.exception(
                     "Worker startup failed; retrying in %ss",

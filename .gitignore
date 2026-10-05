@@ -45,3 +45,4 @@ Thumbs.db
 # Standalone-manager build output
 *.spec
 !grid-media-manager.spec
+.claude/
