@@ -202,6 +202,17 @@ The example leaves the worker available outside weekday business hours. Values
 above one fail closed until Core supports multiple media claim slots for one
 signed worker identity.
 
+## Start automatically
+
+`comfy-bridge --install-service` makes the bridge start on its own: at sign-in
+on Windows (registry Run entry, no admin rights), at boot on Linux (systemd
+unit `grid-media-worker-bridge`, one sudo prompt), at login on macOS (launchd
+agent). `--service-status` and `--uninstall-service` inspect and reverse it.
+The bridge tolerates ComfyUI not being up yet — it waits and says so on the
+dashboard — but ComfyUI needs its own auto-start: Windows specifics, including
+the one-line Task Scheduler setup for portable ComfyUI, are in
+[docs/windows-autostart.md](docs/windows-autostart.md).
+
 ## Help Validate the Grid
 
 Already run persistent infrastructure? AI Power Grid is recruiting two more
