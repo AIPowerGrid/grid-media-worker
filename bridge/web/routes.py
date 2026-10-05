@@ -1,11 +1,10 @@
 import logging
 import os
-from pathlib import Path
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from ..config import Settings
+from ..config import ENV_PATH, Settings
 from ..capacity import validate_max_concurrency, validate_schedule
 from ..comfyui_detect import (
     check_comfyui_url,
@@ -18,7 +17,8 @@ from .app import app, templates, worker_state, start_worker, stop_worker
 
 logger = logging.getLogger(__name__)
 
-ENV_PATH = Path.cwd() / ".env"
+# ENV_PATH comes from config: the install-relative .env, so the setup wizard
+# writes config where a service-started bridge (cwd = system dir) will find it.
 _PERSISTED_SETTINGS = frozenset(
     {
         "COMFYUI_BASE_PATH",

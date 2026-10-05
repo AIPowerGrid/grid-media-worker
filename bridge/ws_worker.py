@@ -270,7 +270,17 @@ class WSWorker:
                     logger.info("Waiting for ComfyUI to finish loading its model list…")
                     await asyncio.sleep(3)
                     await initialize_model_mapper(Settings.COMFYUI_URL)
-            await self._check_runtime_health()
+            try:
+                await self._check_runtime_health()
+            except (httpx.HTTPError, OSError) as exc:
+                # ComfyUI not reachable at all — the normal state right after
+                # login under an auto-started service. Authored message, no
+                # traceback; the supervisor retries until ComfyUI appears.
+                raise RuntimeError(
+                    f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
+                    f"not running yet ({type(exc).__name__}); the worker will "
+                    "keep checking"
+                ) from exc
         # Automatic discovery needs the freshly initialized inventory, including
         # files that appeared during the cold-start wait.
         if not Settings.GRID_PROFILE_PATH and not Settings.GRID_MODELS:
@@ -298,6 +308,17 @@ class WSWorker:
             else:
                 logger.warning(f"Refusing to advertise '{m}': {reason}")
         if not self.models:
+            # Separate "ComfyUI isn't there yet" from "ComfyUI is fine but
+            # nothing qualifies": under an auto-started service the first is
+            # the normal state at login, and the operator needs to see which
+            # one they are in (the supervisor shows this message on the
+            # dashboard and keeps retrying).
+            if not direct_audio and not model_mapper.available_files:
+                raise RuntimeError(
+                    f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
+                    "not running or has not finished loading models yet; the "
+                    "worker will keep checking"
+                )
             raise RuntimeError(
                 "No servable models — every candidate is missing its workflow or "
                 "ComfyUI weights. Install the model files (and a mapped workflow), "

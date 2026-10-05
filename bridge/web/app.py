@@ -57,7 +57,11 @@ async def _run_worker():
                     "%s — retrying in %ss", e, WORKER_START_RETRY_SECONDS
                 )
                 worker_state["running"] = False
-                worker_state["error"] = "Worker unavailable; retrying"
+                # Authored startup messages are written for the operator —
+                # show the real one on the dashboard instead of a generic
+                # "unavailable" (an auto-started bridge waiting for ComfyUI
+                # must say so at 127.0.0.1:7860).
+                worker_state["error"] = str(e)
             except Exception:
                 logger.exception(
                     "Worker startup failed; retrying in %ss",
