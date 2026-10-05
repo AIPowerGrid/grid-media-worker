@@ -55,16 +55,30 @@ def _exec_argv() -> list:
     """
     if getattr(sys, "frozen", False):
         return [str(Path(sys.executable).resolve())]
-    return [sys.executable, "-m", "bridge.cli"]
+    exe = Path(sys.executable)
+    if sys.platform == "win32":
+        # python.exe is a console-subsystem binary: launched from the Run key
+        # it opens a persistent console window at every sign-in. pythonw.exe —
+        # its windowless twin, always next to it in a venv's Scripts/ — keeps
+        # the login start invisible (logs live on the dashboard, not a
+        # terminal). Fall back to python.exe if it is somehow absent.
+        windowless = exe.with_name("pythonw.exe")
+        if windowless.exists():
+            exe = windowless
+    return [str(exe), "-m", "bridge.cli"]
 
 
 def _exec_command() -> str:
-    """The launch command as one shell-ready string (quoted on Windows)."""
+    """The launch command as one shell-ready string.
+
+    The interpreter path is quoted on Windows always ("C:\\Users\\John Doe\\…")
+    and elsewhere when it contains a space — systemd's ExecStart honors double
+    quotes too. The -m args never need quoting."""
     argv = _exec_argv()
-    if sys.platform == "win32":
-        # "C:\Users\John Doe\..." needs quoting; the -m args never do.
-        return " ".join([f'"{argv[0]}"'] + argv[1:])
-    return " ".join(argv)
+    head = argv[0]
+    if sys.platform == "win32" or " " in head:
+        head = f'"{head}"'
+    return " ".join([head] + argv[1:])
 
 
 # ---------------------------------------------------------------------------
@@ -118,26 +132,22 @@ def status() -> None:
 
 
 def schedule_start() -> None:
-    """Start the service after a short delay.
+    """Windows only: start the bridge now, after a short delay.
 
-    The process running --install-service is often the bridge itself, still
-    holding :7860; the delay lets it exit before the service binds the port.
-    On Linux the delay is baked into the install shell (one sudo prompt).
+    The Run value fires only at the NEXT sign-in; this gives the operator a
+    running bridge immediately. The delay lets the process that ran
+    --install-service (possibly a bridge) exit and release :7860 first. On
+    Linux/macOS install() starts the service itself, so there is nothing to do.
     """
     import subprocess
-    if sys.platform == "win32":
-        argv = _exec_argv()
-        quoted = " ".join([f'"{argv[0]}"'] + argv[1:])
-        subprocess.Popen(
-            f"cmd /c ping -n {_BRIDGE_PORT_DELAY_S + 1} 127.0.0.1 >nul 2>&1 & {quoted}",
-            creationflags=0x08000000 | 0x00000200,  # CREATE_NO_WINDOW | NEW_PROCESS_GROUP
-        )
-    elif sys.platform == "darwin":
-        plist = _LAUNCHD_DIR / _LAUNCHD_PLIST
-        subprocess.Popen(
-            ["bash", "-c", f"sleep {_BRIDGE_PORT_DELAY_S} && launchctl load '{plist}'"],
-            start_new_session=True,
-        )
+    if sys.platform != "win32":
+        return
+    argv = _exec_argv()
+    quoted = " ".join([f'"{argv[0]}"'] + argv[1:])
+    subprocess.Popen(
+        f"cmd /c ping -n {_BRIDGE_PORT_DELAY_S + 1} 127.0.0.1 >nul 2>&1 & {quoted}",
+        creationflags=0x08000000 | 0x00000200,  # CREATE_NO_WINDOW | NEW_PROCESS_GROUP
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -191,9 +201,14 @@ def _win_uninstall(verbose: bool = True) -> bool:
         if verbose:
             print("  Auto-start removed from Windows startup.")
         return True
-    except OSError:
-        if verbose:
-            print("  Auto-start was not installed.")
+    except OSError as e:
+        # Missing value = not installed; anything else (e.g. a registry
+        # permission problem) deserves its real error, not that claim.
+        if isinstance(e, FileNotFoundError) or getattr(e, "winerror", None) == 2 or e.errno == 2:
+            if verbose:
+                print("  Auto-start was not installed.")
+        elif verbose:
+            print(f"  Error: {e}")
         return False
     except Exception as e:
         if verbose:
@@ -244,17 +259,17 @@ def _linux_install(verbose: bool = True, start: bool = True) -> bool:
     )
     if start:
         cmds += f" && systemctl start {_SERVICE_NAME}"
-    else:
-        # Delayed start: let the installing process release :7860 first.
-        cmds += (
-            f" && nohup bash -c 'sleep {_BRIDGE_PORT_DELAY_S} && "
-            f"systemctl start {_SERVICE_NAME}' >/dev/null 2>&1 &"
-        )
+    # No delayed-start shell here: a trailing '&' would background the whole
+    # &&-list, making sudo report success before cp even ran (and racing the
+    # temp-file cleanup below). Callers that pass start=False get told how to
+    # start the service themselves.
 
     if _run_privileged(cmds):
         tmp.unlink(missing_ok=True)
         if verbose:
             print("  System service installed.")
+            if not start:
+                print(f"  Start it with: sudo systemctl start {_SERVICE_NAME}")
             print()
             print("  Commands:")
             print(f"    sudo systemctl status {_SERVICE_NAME}")
@@ -339,8 +354,12 @@ def _linux_uninstall(verbose: bool = True) -> bool:
 # ---------------------------------------------------------------------------
 
 def _launchd_plist_content() -> str:
+    from xml.sax.saxutils import escape
+
+    # Paths are data inside XML: '&' or '<' in a directory name must not
+    # produce an unparseable plist.
     arg_entries = "\n".join(
-        f"      <string>{a}</string>" for a in _exec_argv()
+        f"      <string>{escape(a)}</string>" for a in _exec_argv()
     )
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -374,6 +393,9 @@ def _macos_install(verbose: bool = True, start: bool = True) -> bool:
     try:
         plist_path.write_text(_launchd_plist_content())
         if start:
+            # Reinstall over a loaded agent: unload first (quietly — it may
+            # not be loaded) so `load` can't fail with "already loaded".
+            subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True)
             subprocess.run(["launchctl", "load", str(plist_path)], check=True, capture_output=True)
         if verbose:
             print("  Auto-start installed (launchd).")

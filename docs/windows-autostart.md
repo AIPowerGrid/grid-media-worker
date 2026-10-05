@@ -13,7 +13,9 @@ From your grid-media-worker folder (any terminal, no admin rights needed):
 ```
 
 That's it. The bridge now starts every time you sign in to Windows, invisibly
-(no console window), and waits for ComfyUI if it isn't up yet. Check it at
+(the install records your venv's `pythonw.exe` — the windowless Python — so no
+console window appears; the bridge's output lives on its dashboard, not in a
+terminal), and waits for ComfyUI if it isn't up yet. Check it at
 http://127.0.0.1:7860 — while ComfyUI is still starting, the dashboard says so.
 
 - Status:  `.venv\Scripts\python.exe -m bridge.cli --service-status`
@@ -55,9 +57,11 @@ The Run-key install is the simple path. If you want the bridge to also restart
 after a crash, use a Scheduled Task instead (and `--uninstall-service` first so
 they don't double-start):
 
+Run in PowerShell (one line; the outer single quotes keep the inner doubles
+intact — in classic cmd.exe use `schtasks /?` quoting instead):
+
 ```powershell
-schtasks /Create /TN "GridMediaBridge" /SC ONLOGON ^
-  /TR "\"C:\path\to\grid-media-worker\.venv\Scripts\python.exe\" -m bridge.cli" /F
+schtasks /Create /TN "GridMediaBridge" /SC ONLOGON /TR '"C:\path\to\grid-media-worker\.venv\Scripts\pythonw.exe" -m bridge.cli' /F
 ```
 
 Then in Task Scheduler (taskschd.msc) open the task's Settings tab and enable

@@ -137,3 +137,34 @@ def test_cli_dispatches_service_flags(monkeypatch):
             cli.main()
         assert exc.value.code == 0
         assert expected in calls
+
+
+def test_windows_prefers_windowless_python(win, monkeypatch, tmp_path):
+    """The Run value must record pythonw.exe when the venv has it — python.exe
+    is a console binary and would open a visible window at every sign-in."""
+    scripts = tmp_path / "Scripts"
+    scripts.mkdir()
+    (scripts / "python.exe").write_bytes(b"")
+    (scripts / "pythonw.exe").write_bytes(b"")
+    monkeypatch.setattr(service.sys, "executable", str(scripts / "python.exe"))
+    service.install(verbose=False)
+    cmd = win.values[service._WIN_APP_NAME]
+    assert "pythonw.exe" in cmd
+    assert cmd.startswith('"') and cmd.endswith(" -m bridge.cli")
+
+
+def test_systemd_execstart_quotes_paths_with_spaces(monkeypatch):
+    monkeypatch.setattr(service.sys, "executable", "/opt/my venv/bin/python")
+    unit = service._systemd_unit_content()
+    assert 'ExecStart="/opt/my venv/bin/python" -m bridge.cli' in unit
+
+
+def test_launchd_plist_survives_xml_special_chars(monkeypatch):
+    import plistlib
+
+    monkeypatch.setattr(service.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(service.sys, "executable", "/Users/a&b <c>/venv/bin/python")
+    parsed = plistlib.loads(service._launchd_plist_content().encode())
+    assert parsed["ProgramArguments"][0] == "/Users/a&b <c>/venv/bin/python"
+    assert parsed["ProgramArguments"][1:] == ["-m", "bridge.cli"]
+    assert parsed["KeepAlive"] is True
