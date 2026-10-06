@@ -62,17 +62,19 @@ def _exec_argv() -> list:
     """
     if getattr(sys, "frozen", False):
         return [str(Path(sys.executable).resolve())]
-    exe = Path(sys.executable)
+    # Kept as given (already a native path): a Path round-trip would rewrite
+    # separators for the host OS, not the platform the unit is written for.
+    exe = sys.executable
     if sys.platform == "win32":
         # python.exe is a console-subsystem binary: launched from the Run key
         # it opens a persistent console window at every sign-in. pythonw.exe —
         # its windowless twin, always next to it in a venv's Scripts/ — keeps
         # the login start invisible (logs live on the dashboard, not a
         # terminal). Fall back to python.exe if it is somehow absent.
-        windowless = exe.with_name("pythonw.exe")
+        windowless = Path(exe).with_name("pythonw.exe")
         if windowless.exists():
-            exe = windowless
-    return [str(exe), "-m", "bridge.cli"]
+            exe = str(windowless)
+    return [exe, "-m", "bridge.cli"]
 
 
 def _exec_command() -> str:

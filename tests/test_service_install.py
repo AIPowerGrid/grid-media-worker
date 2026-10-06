@@ -103,6 +103,7 @@ def test_windows_uninstall_removes_value_and_is_idempotent(win):
 
 
 def test_systemd_unit_content_is_service_ready(monkeypatch):
+    monkeypatch.setattr(service.sys, "platform", "linux")  # content for that OS, on any host
     import getpass
 
     monkeypatch.setattr(service.sys, "executable", "/opt/venv/bin/python")
@@ -116,6 +117,7 @@ def test_systemd_unit_content_is_service_ready(monkeypatch):
 
 
 def test_launchd_plist_keeps_argv_separate(monkeypatch):
+    monkeypatch.setattr(service.sys, "platform", "darwin")  # content for that OS, on any host
     # The text worker split a quoted command string here, which breaks on
     # paths with spaces; the port must emit one <string> per argv element.
     monkeypatch.setattr(service.sys, "frozen", False, raising=False)
@@ -181,12 +183,14 @@ def test_windows_prefers_windowless_python(win, monkeypatch, tmp_path):
 
 
 def test_systemd_execstart_quotes_paths_with_spaces(monkeypatch):
+    monkeypatch.setattr(service.sys, "platform", "linux")  # content for that OS, on any host
     monkeypatch.setattr(service.sys, "executable", "/opt/my venv/bin/python")
     unit = service._systemd_unit_content()
     assert 'ExecStart="/opt/my venv/bin/python" -m bridge.cli' in unit
 
 
 def test_launchd_plist_survives_xml_special_chars(monkeypatch):
+    monkeypatch.setattr(service.sys, "platform", "darwin")  # content for that OS, on any host
     import plistlib
 
     monkeypatch.setattr(service.sys, "frozen", False, raising=False)
