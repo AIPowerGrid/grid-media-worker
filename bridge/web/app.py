@@ -52,8 +52,13 @@ async def _run_worker():
                 # Authored, retryable startup conditions — a full traceback
                 # here reads as a crash to a first-time operator when it's a
                 # plain state. Unexpected exceptions below keep the traceback.
-                logger.error(
-                    "%s — retrying in %ss", e, WORKER_START_RETRY_SECONDS
+                from ..ws_worker import StartupPending
+
+                # Waiting for ComfyUI is an expected state, not a fault: log it
+                # as a warning so ERROR lines stay meaningful.
+                logger.log(
+                    logging.WARNING if isinstance(e, StartupPending) else logging.ERROR,
+                    "%s — retrying in %ss", e, WORKER_START_RETRY_SECONDS,
                 )
                 worker_state["running"] = False
                 # Only StartupPending messages are authored FOR the dashboard
@@ -61,8 +66,6 @@ async def _run_worker():
                 # 127.0.0.1:7860). Other RuntimeErrors — e.g. an ACE-Step
                 # readiness failure interpolating raw exception text — stay
                 # generic on the UI, per the stable-error-classes contract.
-                from ..ws_worker import StartupPending
-
                 worker_state["error"] = (
                     str(e)
                     if isinstance(e, StartupPending)

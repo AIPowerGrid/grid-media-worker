@@ -90,6 +90,86 @@ class _RotatingLogStream:
         self._handler.close()
 
 
+class _QuietStatusPolls(logging.Filter):
+    """Drop uvicorn access lines for the dashboard's /api/status polling.
+
+    An open dashboard polls every 5s; logging each poll buried the useful
+    lines and was most of the service log's growth. Other requests (setup,
+    settings, restart) are still logged."""
+
+    def filter(self, record):
+        args = record.args if isinstance(record.args, tuple) else ()
+        return not (len(args) >= 3 and args[2] == "/api/status")
+
+
+def _uvicorn_log_config():
+    import copy
+
+    from uvicorn.config import LOGGING_CONFIG
+
+    config = copy.deepcopy(LOGGING_CONFIG)
+    config.setdefault("filters", {})["quiet_status_polls"] = {
+        "()": _QuietStatusPolls,
+    }
+    config["handlers"]["access"]["filters"] = ["quiet_status_polls"]
+    return config
+
+
+class _RepeatThrottle(logging.Filter):
+    """Let an identical message through once per window, then report how
+    often it repeated ("last message repeated N times", as syslog does).
+
+    While ComfyUI is down the startup cycle re-logs the same few lines every
+    few seconds for as long as the rig is up. Errors always pass: a recurring
+    fault must stay visible."""
+
+    def __init__(self, window_s=600.0, clock=None):
+        import threading
+        import time
+
+        super().__init__()
+        self._window_s = window_s
+        self._clock = clock or time.monotonic
+        self._lock = threading.Lock()
+        self._seen = {}  # (logger, level, text) -> [last_emitted_at, suppressed]
+
+    def filter(self, record):
+        if record.levelno >= logging.ERROR:
+            return True
+        text = record.getMessage()
+        key = (record.name, record.levelno, text)
+        now = self._clock()
+        with self._lock:
+            entry = self._seen.get(key)
+            if entry is not None and now - entry[0] < self._window_s:
+                entry[1] += 1
+                return False
+            suppressed = entry[1] if entry is not None else 0
+            if len(self._seen) > 1000:  # bound memory: forget stale messages
+                self._seen = {
+                    k: v for k, v in self._seen.items()
+                    if now - v[0] < self._window_s
+                }
+            self._seen[key] = [now, 0]
+        if suppressed:
+            record.msg = (
+                f"{text} (repeated {suppressed} more times in the last "
+                f"{int(self._window_s // 60)} min)"
+            )
+            record.args = None
+        return True
+
+
+def _quiet_chatty_loggers():
+    # httpx logs every request at INFO — the 10s ComfyUI health check alone
+    # was a line every 10 seconds, forever. Keep its warnings and errors.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+    throttle = _RepeatThrottle()
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(throttle)
+
+
 def _ensure_streams(log_path=None):
     """Give a windowless process real stdout/stderr.
 
@@ -122,6 +202,7 @@ def main():
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
     )
+    _quiet_chatty_loggers()
 
     import argparse
 
@@ -168,7 +249,10 @@ def main():
 
     logger.info(f"Starting Comfy Bridge on http://{host}:{port}")
     try:
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        uvicorn.run(
+            app, host=host, port=port, log_level="info",
+            log_config=_uvicorn_log_config(),
+        )
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, exiting gracefully.")
         sys.exit(0)
