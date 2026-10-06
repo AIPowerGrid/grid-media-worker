@@ -273,8 +273,12 @@ class WSWorker:
             )
         else:
             # Covers the first inventory fetch, so a fresh supervisor cycle
-            # never shows an empty status between two waiting messages.
-            self.status_message = f"Connecting to ComfyUI at {Settings.COMFYUI_URL}…"
+            # never breaks the authored waiting state with an empty or
+            # differently worded status.
+            self.status_message = (
+                f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — connecting; "
+                "the worker will keep checking"
+            )
             await initialize_model_mapper(Settings.COMFYUI_URL)
             # ComfyUI answers HTTP before its model scan finishes, so a first
             # pass can see zero files and the whole startup used to abort with

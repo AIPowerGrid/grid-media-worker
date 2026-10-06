@@ -229,3 +229,31 @@ async def test_reachable_comfyui_without_weights_is_not_reported_as_down(monkeyp
         await worker.comfy.aclose()
     assert "running but has no model files installed yet" in sampled["message"]
     assert "not running" not in sampled["message"]
+
+
+@pytest.mark.asyncio
+async def test_first_inventory_fetch_already_reports_waiting(monkeypatch):
+    """A fresh supervisor cycle must not break the waiting state while its
+    first ComfyUI inventory fetch is in flight (it read "Connecting…" or
+    nothing for ~5s of every cycle)."""
+    import bridge.ws_worker as ws
+
+    monkeypatch.setattr(Settings, "GRID_PROFILE_PATH", "")
+    monkeypatch.setattr(Settings, "GRID_MODELS", [])
+    monkeypatch.setattr(Settings, "GRID_TRUST_MODELS", False)
+    monkeypatch.setattr(Settings, "GRID_SCHEDULE", "")
+    monkeypatch.setattr(Settings, "THREADS", 1)
+    worker = ws.WSWorker()
+    sampled = {}
+
+    async def sample_fetch(_url):
+        sampled["message"] = worker.status_message
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ws, "initialize_model_mapper", sample_fetch)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await worker.run()
+    finally:
+        await worker.comfy.aclose()
+    assert sampled["message"] and "Waiting for ComfyUI" in sampled["message"]
