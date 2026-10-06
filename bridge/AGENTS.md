@@ -32,6 +32,13 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 - `utils.py` — seed + media encoding helpers. `cli.py` — console entry; launches the web app.
   Without a console (pythonw service start) it routes stdout/stderr to the
   install-relative `bridge-service.log`, rotated at 5 MB with three backups.
+- `service.py` — `--install-service` / `--uninstall-service` /
+  `--service-status`. Windows: HKCU Run value (sign-in start), or with
+  `--restart-on-crash` a per-user scheduled task `GridMediaBridge` (sign-in
+  trigger plus a 5-minute watchdog, `IgnoreNew`, no time limit; no admin).
+  Exactly one Windows mode is installed at a time; uninstall removes either.
+  Windows status probes `/api/status` on the bridge port and exits 1 when
+  installed but not running. Linux: systemd unit; macOS: launchd agent.
 - `image_output.py` - validates/re-encodes PNG, WebP, and JPEG outputs to match
   signed upload content types; receipts hash the uploaded bytes.
 - `loras.py` - source/sink-checked recipe LoRA injection, local safetensors

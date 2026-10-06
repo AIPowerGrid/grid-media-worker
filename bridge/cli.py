@@ -219,24 +219,32 @@ def main():
         help="remove the auto-start installation",
     )
     parser.add_argument(
+        "--restart-on-crash", action="store_true",
+        help="with --install-service on Windows: use a scheduled task that also "
+             "restarts the bridge within 5 minutes if it stops",
+    )
+    parser.add_argument(
         "--service-status", action="store_true",
-        help="show whether auto-start is installed",
+        help="show whether auto-start is installed and the bridge is running "
+             "(exit code 1 on Windows when installed but not running)",
     )
     args = parser.parse_args()
+    if args.restart_on_crash and not args.install_service:
+        parser.error("--restart-on-crash only applies to --install-service")
 
     if args.service_status:
         from . import service
-        service.status()
-        sys.exit(0)
+        sys.exit(service.status() or 0)
     if args.uninstall_service:
         from . import service
         sys.exit(0 if service.uninstall() else 1)
     if args.install_service:
         from . import service
-        ok = service.install(start=True)
-        if ok and sys.platform == "win32":
+        ok = service.install(start=True, restart_on_crash=args.restart_on_crash)
+        if ok and sys.platform == "win32" and not args.restart_on_crash:
             # The Run key alone only fires at the NEXT login — also start the
             # bridge now, after a short delay in case a bridge is exiting.
+            # (The scheduled task starts itself.)
             service.schedule_start()
         sys.exit(0 if ok else 1)
 

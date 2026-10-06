@@ -25,8 +25,24 @@ http://127.0.0.1:7860 — while ComfyUI is still starting, the dashboard says so
 What it actually does: writes one registry value under
 `HKCU\...\CurrentVersion\Run` — the same mechanism apps use for "start with
 Windows". It runs as your user at sign-in. It does not restart on a crash and
-does not run before you sign in; for crash restarts, see the Task Scheduler
-alternative at the bottom.
+does not run before you sign in; for crash restarts, see
+[Restart after a crash](#restart-after-a-crash-optional) below.
+
+### Is it running?
+
+`--service-status` says how auto-start is installed **and** whether the bridge
+is actually up:
+
+```text
+  Auto-start installed: at sign-in (Windows Run key; no restart if it stops).
+  Bridge: running at http://127.0.0.1:7860 — connected to the grid, advertising 2 model(s)
+```
+
+If the bridge has stopped, it says `Bridge: NOT running`, shows the last lines
+of `bridge-service.log` (where a crash leaves its error), and exits with code 1,
+so a script can check it. When the bridge is down, the dashboard at
+http://127.0.0.1:7860 does not load at all (the bridge serves it), and the
+worker shows offline in the AIPG console.
 
 ## 2. ComfyUI: pick your flavor
 
@@ -61,30 +77,29 @@ dashboard and `/api/status` show a "Waiting for ComfyUI…" message instead of a
 error. If ComfyUI takes two minutes to warm up, the worker joins the grid two
 minutes after login — no interaction needed.
 
-## Task Scheduler alternative for the bridge (optional)
+## Restart after a crash (optional)
 
-The Run-key install is the simple path. If you want the bridge to also come
-back after a crash, use a Scheduled Task instead (and `--uninstall-service`
-first so they don't double-start). Run in PowerShell from your
-grid-media-worker folder, no admin rights needed:
+The Run-key install is the simple path. If you also want the bridge to come
+back on its own after a crash, install it with `--restart-on-crash` instead
+(from your grid-media-worker folder, no admin rights needed):
 
 ```powershell
-$py = (Resolve-Path ".venv\Scripts\pythonw.exe").Path
-$me = "$env:USERDOMAIN\$env:USERNAME"
-$watchdog = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
-Register-ScheduledTask -TaskName "GridMediaBridge" -Force `
-  -Trigger @((New-ScheduledTaskTrigger -AtLogOn -User $me), $watchdog) `
-  -Action (New-ScheduledTaskAction -Execute $py -Argument "-m bridge.cli" -WorkingDirectory (Get-Location).Path) `
-  -Settings (New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries)
+.venv\Scripts\python.exe -m bridge.cli --install-service --restart-on-crash
 ```
 
-How the restart works: the second trigger fires every 5 minutes while you are
-signed in. If the bridge is still running, `IgnoreNew` skips that run; if it
-has exited, the bridge starts again — so a crash costs at most 5 minutes. (Task
-Scheduler's own "If the task fails, restart" setting does not help here: it
-covers a task that fails to launch, not a program that exits with an error.)
+This creates a scheduled task for your user named `GridMediaBridge` (see it
+in Task Scheduler → Task Scheduler Library) and removes the Run-key entry, so
+the two never double-start. Running plain `--install-service` later switches
+back; `--uninstall-service` removes whichever is installed.
 
-Remove later with `Unregister-ScheduledTask -TaskName "GridMediaBridge" -Confirm:$false`.
+How the restart works: besides starting at sign-in, the task has a watchdog
+trigger that fires every 5 minutes while you are signed in. If the bridge is
+still running, that run is skipped; if it has exited, the bridge starts
+again — so a crash costs at most 5 minutes. A bridge that cannot start at all
+(say, a broken `.env`) is retried every 5 minutes indefinitely;
+`--service-status` and the log show why. (Task Scheduler's own "If the task
+fails, restart" setting does not help here: it covers a task that fails to
+launch, not a program that exits with an error.)
 
 ## Verify the whole thing once
 

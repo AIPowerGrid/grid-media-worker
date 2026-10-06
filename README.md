@@ -207,10 +207,14 @@ signed worker identity.
 `comfy-bridge --install-service` makes the bridge start on its own: at sign-in
 on Windows (registry Run entry, no admin rights), at boot on Linux (systemd
 unit `grid-media-worker-bridge`, one sudo prompt), at login on macOS (launchd
-agent). `--service-status` and `--uninstall-service` inspect and reverse it.
+agent). On Windows, add `--restart-on-crash` to use a per-user scheduled task
+that also restarts the bridge within 5 minutes if it stops (systemd and launchd
+already restart it). `--service-status` shows how it is installed and whether
+the bridge is running (on Windows it exits 1 when installed but down);
+`--uninstall-service` reverses either mode.
 The bridge tolerates ComfyUI not being up yet — it waits and says so on the
 dashboard — but ComfyUI needs its own auto-start: Windows specifics, including
-the one-line Task Scheduler setup for portable ComfyUI, are in
+the Task Scheduler setup for portable ComfyUI, are in
 [docs/windows-autostart.md](docs/windows-autostart.md).
 
 ## Help Validate the Grid
