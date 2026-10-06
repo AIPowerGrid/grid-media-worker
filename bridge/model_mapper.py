@@ -1,9 +1,12 @@
 import httpx
+import logging
 import json
 import os
 from typing import Dict, List, Optional
 
 from .config import REPO_ROOT, Settings
+
+logger = logging.getLogger(__name__)
 
 # File extensions that denote a model weight in a ComfyUI loader combo-box.
 MODEL_EXTS = (".safetensors", ".ckpt", ".gguf", ".pt", ".pth", ".bin", ".sft")
@@ -35,7 +38,7 @@ async def fetch_comfyui_model_files(comfy_url: str) -> set:
             r.raise_for_status()
             data = r.json()
     except Exception as e:
-        print(f"Warning: could not fetch ComfyUI object_info: {e}")
+        logger.warning(f"could not fetch ComfyUI object_info: {e}")
         return files
 
     for _node, spec in data.items():
@@ -88,7 +91,7 @@ async def fetch_comfyui_models(comfy_url: str) -> List[str]:
                     return models
 
             except Exception as e:
-                print(f"Warning: {endpoint} fetch failed: {e}")
+                logger.warning(f"{endpoint} fetch failed: {e}")
 
     return []
 
@@ -156,7 +159,7 @@ class ModelMapper:
             # No env override: fall back to static defaults
             self._build_workflow_map()
 
-        print(
+        logger.info(
             f"Initialized workflow mapper with {len(self.workflow_map)} Grid models mapped to workflows"
         )
 
@@ -221,11 +224,11 @@ class ModelMapper:
                         reference_map[path_value] = grid_model_name
                         loaded_models += 1
 
-            print(
+            logger.info(
                 f"Loaded model reference from {'URL' if is_url else 'file'}: {location} (entries: {loaded_models})"
             )
         except Exception as e:
-            print(f"Warning: failed to load model reference: {e}")
+            logger.warning(f"failed to load model reference: {e}")
         return reference_map
 
     def _iter_env_workflow_files(self) -> List[str]:
@@ -244,7 +247,7 @@ class ModelMapper:
             if os.path.exists(abs_path):
                 resolved_paths.append(abs_path)
             else:
-                print(f"Warning: workflow file not found from env: {abs_path}")
+                logger.warning(f"workflow file not found from env: {abs_path}")
         return resolved_paths
 
     def _extract_model_files_from_workflow(self, workflow_path: str) -> List[str]:
@@ -260,7 +263,7 @@ class ModelMapper:
             with open(workflow_path, "r", encoding="utf-8") as f:
                 wf = json.load(f)
         except Exception as e:
-            print(f"Warning: failed to read workflow '{workflow_path}': {e}")
+            logger.warning(f"failed to read workflow '{workflow_path}': {e}")
             return []
 
         # Extract workflow filename for better logging
@@ -348,8 +351,8 @@ class ModelMapper:
                     model_file
                 )
                 if grid_model_name and is_retired_model(grid_model_name):
-                    print(
-                        f"Info: model file '{model_file}' resolves to retired model "
+                    logger.info(
+                        f"model file '{model_file}' resolves to retired model "
                         f"'{grid_model_name}'; not advertising"
                     )
                 elif grid_model_name:
@@ -358,10 +361,10 @@ class ModelMapper:
                     # Special handling for z-image-turbo which uses z_image_turbo_bf16.safetensors
                     if model_file == "z_image_turbo_bf16.safetensors" and filename == "image_z_image_turbo.json":
                         self.workflow_map["z-image-turbo"] = filename
-                        print(f"Info: mapped z-image-turbo model to {filename}")
+                        logger.info(f"mapped z-image-turbo model to {filename}")
                     else:
-                        print(
-                            f"Info: model file '{model_file}' from '{filename}' not found in reference; not advertising"
+                        logger.info(
+                            f"model file '{model_file}' from '{filename}' not found in reference; not advertising"
                         )
 
     def get_workflow_file(
@@ -455,7 +458,7 @@ class ModelMapper:
             if ok:
                 servable.append(m)
             else:
-                print(f"Not advertising '{m}': {reason}")
+                logger.info(f"Not advertising '{m}': {reason}")
         return servable
 
     def capability_report(self) -> List[dict]:

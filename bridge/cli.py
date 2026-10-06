@@ -36,11 +36,217 @@ def validated_bridge_host(value: object) -> str:
     return host
 
 
+# The windowless service log is capped: at most (1 + backups) files of
+# SERVICE_LOG_MAX_BYTES each, so an always-on rig cannot fill its disk.
+SERVICE_LOG_MAX_BYTES = 5 * 1024 * 1024
+SERVICE_LOG_BACKUPS = 3
+
+
+class _RotatingLogStream:
+    """A sys.stdout/sys.stderr replacement that rotates like
+    RotatingFileHandler (bridge-service.log -> .1 -> .2 …).
+
+    Rotation must happen at the stream, not only in a logging handler:
+    print() calls and uvicorn's own handlers write to the streams directly.
+    """
+
+    def __init__(self, path, max_bytes=SERVICE_LOG_MAX_BYTES,
+                 backups=SERVICE_LOG_BACKUPS):
+        import threading
+        from logging.handlers import RotatingFileHandler
+
+        self._handler = RotatingFileHandler(
+            path, maxBytes=max_bytes, backupCount=backups,
+            encoding="utf-8", errors="replace",
+        )
+        self._max_bytes = max_bytes
+        self._lock = threading.Lock()
+
+    def write(self, text):
+        with self._lock:
+            handler = self._handler
+            if handler.stream is None:  # a previous rollover failed midway
+                handler.stream = handler._open()
+            handler.stream.write(text)
+            handler.stream.flush()
+            if handler.stream.tell() >= self._max_bytes:
+                try:
+                    handler.doRollover()
+                except OSError:
+                    # e.g. a viewer holds the file open on Windows; keep
+                    # appending and retry the rollover on a later write.
+                    pass
+        return len(text)
+
+    def flush(self):
+        with self._lock:
+            if self._handler.stream is not None:
+                self._handler.stream.flush()
+
+    def isatty(self):
+        return False
+
+    def close(self):
+        self._handler.close()
+
+
+class _QuietStatusPolls(logging.Filter):
+    """Drop uvicorn access lines for the dashboard's /api/status polling.
+
+    An open dashboard polls every 5s; logging each poll buried the useful
+    lines and was most of the service log's growth. Other requests (setup,
+    settings, restart) are still logged."""
+
+    def filter(self, record):
+        args = record.args if isinstance(record.args, tuple) else ()
+        return not (len(args) >= 3 and args[2] == "/api/status")
+
+
+def _uvicorn_log_config():
+    import copy
+
+    from uvicorn.config import LOGGING_CONFIG
+
+    config = copy.deepcopy(LOGGING_CONFIG)
+    config.setdefault("filters", {})["quiet_status_polls"] = {
+        "()": _QuietStatusPolls,
+    }
+    config["handlers"]["access"]["filters"] = ["quiet_status_polls"]
+    return config
+
+
+class _RepeatThrottle(logging.Filter):
+    """Let an identical message through once per window, then report how
+    often it repeated ("last message repeated N times", as syslog does).
+
+    While ComfyUI is down the startup cycle re-logs the same few lines every
+    few seconds for as long as the rig is up. Errors always pass: a recurring
+    fault must stay visible."""
+
+    def __init__(self, window_s=600.0, clock=None):
+        import threading
+        import time
+
+        super().__init__()
+        self._window_s = window_s
+        self._clock = clock or time.monotonic
+        self._lock = threading.Lock()
+        self._seen = {}  # (logger, level, text) -> [last_emitted_at, suppressed]
+
+    def filter(self, record):
+        if record.levelno >= logging.ERROR:
+            return True
+        text = record.getMessage()
+        key = (record.name, record.levelno, text)
+        now = self._clock()
+        with self._lock:
+            entry = self._seen.get(key)
+            if entry is not None and now - entry[0] < self._window_s:
+                entry[1] += 1
+                return False
+            suppressed = entry[1] if entry is not None else 0
+            if len(self._seen) > 1000:  # bound memory: forget stale messages
+                self._seen = {
+                    k: v for k, v in self._seen.items()
+                    if now - v[0] < self._window_s
+                }
+            self._seen[key] = [now, 0]
+        if suppressed:
+            record.msg = (
+                f"{text} (repeated {suppressed} more times in the last "
+                f"{int(self._window_s // 60)} min)"
+            )
+            record.args = None
+        return True
+
+
+def _quiet_chatty_loggers():
+    # httpx logs every request at INFO — the 10s ComfyUI health check alone
+    # was a line every 10 seconds, forever. Keep its warnings and errors.
+    for name in ("httpx", "httpcore"):
+        logging.getLogger(name).setLevel(logging.WARNING)
+    throttle = _RepeatThrottle()
+    for handler in logging.getLogger().handlers:
+        handler.addFilter(throttle)
+
+
+def _ensure_streams(log_path=None):
+    """Give a windowless process real stdout/stderr.
+
+    Under pythonw.exe (the auto-start Run value) there is no console:
+    sys.stdout and sys.stderr are None, and the first write by logging or
+    uvicorn's formatter kills the bridge within a second — silently, because
+    there is nowhere to print the traceback. Send both streams to a rotating
+    logfile next to the install instead, so a service start still leaves
+    evidence without growing forever.
+    """
+    import sys as _sys
+
+    if _sys.stdout is not None and _sys.stderr is not None:
+        return None
+    if log_path is None:
+        from .config import REPO_ROOT
+
+        log_path = REPO_ROOT / "bridge-service.log"
+    stream = _RotatingLogStream(log_path)
+    if _sys.stdout is None:
+        _sys.stdout = stream
+    if _sys.stderr is None:
+        _sys.stderr = stream
+    return stream
+
+
 def main():
     """Entry point for `comfy-bridge` console script and `python -m bridge.cli`."""
+    _ensure_streams()
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
     )
+    _quiet_chatty_loggers()
+
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="comfy-bridge",
+        description="AI Power Grid media worker bridge for ComfyUI.",
+    )
+    parser.add_argument(
+        "--install-service", action="store_true",
+        help="start the bridge automatically (Windows login / systemd / launchd)",
+    )
+    parser.add_argument(
+        "--uninstall-service", action="store_true",
+        help="remove the auto-start installation",
+    )
+    parser.add_argument(
+        "--restart-on-crash", action="store_true",
+        help="with --install-service on Windows: use a scheduled task that also "
+             "restarts the bridge within 5 minutes if it stops",
+    )
+    parser.add_argument(
+        "--service-status", action="store_true",
+        help="show whether auto-start is installed and the bridge is running "
+             "(exit code 1 on Windows when installed but not running)",
+    )
+    args = parser.parse_args()
+    if args.restart_on_crash and not args.install_service:
+        parser.error("--restart-on-crash only applies to --install-service")
+
+    if args.service_status:
+        from . import service
+        sys.exit(service.status() or 0)
+    if args.uninstall_service:
+        from . import service
+        sys.exit(0 if service.uninstall() else 1)
+    if args.install_service:
+        from . import service
+        ok = service.install(start=True, restart_on_crash=args.restart_on_crash)
+        if ok and sys.platform == "win32" and not args.restart_on_crash:
+            # The Run key alone only fires at the NEXT login — also start the
+            # bridge now, after a short delay in case a bridge is exiting.
+            # (The scheduled task starts itself.)
+            service.schedule_start()
+        sys.exit(0 if ok else 1)
 
     import uvicorn
     from .config import Settings
@@ -51,7 +257,10 @@ def main():
 
     logger.info(f"Starting Comfy Bridge on http://{host}:{port}")
     try:
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        uvicorn.run(
+            app, host=host, port=port, log_level="info",
+            log_config=_uvicorn_log_config(),
+        )
     except KeyboardInterrupt:
         logger.info("Received keyboard interrupt, exiting gracefully.")
         sys.exit(0)

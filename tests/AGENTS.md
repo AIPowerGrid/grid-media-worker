@@ -10,6 +10,19 @@ and the WebSocket worker.
 - `test_operator_rough_edges.py` - cold-start inventory/discovery, portable
   port-conflict diagnostics, install-relative defaults, advertised status, and
   advisory price-book aliases/fetch failures.
+- `test_service_boot.py` - service-start conditions: install-relative `.env`,
+  windowless (pythonw) stream fallback, and the authored ComfyUI waiting /
+  no-model-files status staying visible for the whole wait.
+- `test_service_install.py` - auto-start command quoting and Run-key/systemd/
+  launchd install content; the Windows restart-on-crash task XML, mode
+  switching, uninstall of either mode, and `--service-status` running/crashed
+  detection (fake registry and schtasks; never touches the real system).
+- `test_service_logging.py` - service-log volume: repeat throttle, quieted
+  status-poll access lines and httpx request lines, logging (not print) in
+  the model mapper, and the ComfyUI wait logged as a warning.
+- `test_windows_autostart_doc.py` - pins the verified properties of the
+  auto-start doc: the ComfyUI portable task command (per-user, no 72h
+  limit), the built-in --restart-on-crash flag, and crash detection.
 - `test_bridge_web.py` - legacy loopback bridge dashboard/settings rendering,
   same-origin and trusted-executable boundaries, URL/config validation, plus
   startup-failure supervision against the installed FastAPI/Starlette API.

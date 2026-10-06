@@ -60,6 +60,14 @@ RECONNECT_DELAY_S = 5
 # How long to wait for ComfyUI's model scan on a cold start before giving the
 # candidate check its answer anyway (it may still legitimately fail).
 COMFY_MODELS_WAIT_S = 60
+
+
+class StartupPending(RuntimeError):
+    """A retryable startup state whose message was AUTHORED for the operator.
+
+    The supervisor shows str(exc) of THIS type on the dashboard/status; any
+    other exception gets a generic message, so raw library or runtime error
+    text (e.g. an ACE-Step readiness failure) never reaches the UI verbatim."""
 RUNTIME_HEALTH_INTERVAL_S = 10
 CAPACITY_POLL_INTERVAL_S = 15
 RUNTIME_HEALTH_FAILURE_LIMIT = 3
@@ -219,6 +227,12 @@ class WSWorker:
         self.profile: dict | None = None
         self.direct_audio = False
         self._capacity_error: str | None = None
+        # Live startup phase, readable by /api/status while run() is still
+        # inside it. The supervisor's worker_state["error"] only carries a
+        # message AFTER a cycle fails — without this, the 60s ComfyUI wait
+        # showed "running, no error" and the authored waiting message was
+        # visible for only ~5s of every ~65s cycle.
+        self.status_message: str | None = None
 
     async def run(self):
         if websockets is None:
@@ -258,6 +272,13 @@ class WSWorker:
                 api_key=Settings.ACE_STEP_API_KEY,
             )
         else:
+            # Covers the first inventory fetch, so a fresh supervisor cycle
+            # never breaks the authored waiting state with an empty or
+            # differently worded status.
+            self.status_message = (
+                f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — connecting; "
+                "the worker will keep checking"
+            )
             await initialize_model_mapper(Settings.COMFYUI_URL)
             # ComfyUI answers HTTP before its model scan finishes, so a first
             # pass can see zero files and the whole startup used to abort with
@@ -267,10 +288,38 @@ class WSWorker:
             if not Settings.GRID_TRUST_MODELS:
                 deadline = time.monotonic() + COMFY_MODELS_WAIT_S
                 while not model_mapper.available_files and time.monotonic() < deadline:
+                    # An empty inventory alone cannot tell "ComfyUI is down"
+                    # from "ComfyUI is up with no weights" — the file fetch
+                    # swallows connection errors — so probe health to show the
+                    # operator the right one of the two authored states.
+                    try:
+                        await self._check_runtime_health()
+                        self.status_message = (
+                            f"ComfyUI at {Settings.COMFYUI_URL} is running but has "
+                            "no model files installed yet — add weights to "
+                            "ComfyUI's models folders (checkpoints, vae, …); the "
+                            "worker will keep checking"
+                        )
+                    except (httpx.HTTPError, OSError):
+                        self.status_message = (
+                            f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
+                            "not running or not responding yet; the worker will "
+                            "keep checking"
+                        )
                     logger.info("Waiting for ComfyUI to finish loading its model list…")
                     await asyncio.sleep(3)
                     await initialize_model_mapper(Settings.COMFYUI_URL)
-            await self._check_runtime_health()
+            try:
+                await self._check_runtime_health()
+            except (httpx.HTTPError, OSError) as exc:
+                # ComfyUI not reachable (or not answering healthily) — the
+                # normal state right after login under an auto-started service.
+                # Authored message, no traceback; the supervisor retries.
+                raise StartupPending(
+                    f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
+                    f"not running or not responding yet ({type(exc).__name__});"
+                    " the worker will keep checking"
+                ) from exc
         # Automatic discovery needs the freshly initialized inventory, including
         # files that appeared during the cold-start wait.
         if not Settings.GRID_PROFILE_PATH and not Settings.GRID_MODELS:
@@ -298,11 +347,24 @@ class WSWorker:
             else:
                 logger.warning(f"Refusing to advertise '{m}': {reason}")
         if not self.models:
-            raise RuntimeError(
+            # Three distinct operator states, each with its own authored
+            # message (the supervisor shows it on the dashboard and retries):
+            # reaching here means the health check PASSED, so an empty
+            # inventory is "ComfyUI is up but has no model files", not
+            # "ComfyUI is not running".
+            if not direct_audio and not model_mapper.available_files:
+                raise StartupPending(
+                    f"ComfyUI at {Settings.COMFYUI_URL} is running but has no "
+                    "model files installed yet — add weights to ComfyUI's "
+                    "models folders (checkpoints, vae, …); the worker will "
+                    "keep checking"
+                )
+            raise StartupPending(
                 "No servable models — every candidate is missing its workflow or "
                 "ComfyUI weights. Install the model files (and a mapped workflow), "
                 "then restart. Candidates were: %s" % candidates
             )
+        self.status_message = None
         logger.info(f"WS worker advertising servable models: {self.models}")
         for name in unsellable_names(
             self.models, await fetch_priced_model_names(Settings.GRID_API_URL)

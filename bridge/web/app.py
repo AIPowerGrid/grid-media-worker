@@ -49,15 +49,28 @@ async def _run_worker():
                 logger.info("Worker task cancelled.")
                 raise
             except RuntimeError as e:
-                # Our own authored startup conditions ("No servable models…",
-                # "Registration rejected…") — a full traceback here reads as a
-                # crash to a first-time operator when it's a plain, retryable
-                # state. Unexpected exceptions below still get the traceback.
-                logger.error(
-                    "%s — retrying in %ss", e, WORKER_START_RETRY_SECONDS
+                # Authored, retryable startup conditions — a full traceback
+                # here reads as a crash to a first-time operator when it's a
+                # plain state. Unexpected exceptions below keep the traceback.
+                from ..ws_worker import StartupPending
+
+                # Waiting for ComfyUI is an expected state, not a fault: log it
+                # as a warning so ERROR lines stay meaningful.
+                logger.log(
+                    logging.WARNING if isinstance(e, StartupPending) else logging.ERROR,
+                    "%s — retrying in %ss", e, WORKER_START_RETRY_SECONDS,
                 )
                 worker_state["running"] = False
-                worker_state["error"] = "Worker unavailable; retrying"
+                # Only StartupPending messages are authored FOR the dashboard
+                # (an auto-started bridge waiting for ComfyUI must say so at
+                # 127.0.0.1:7860). Other RuntimeErrors — e.g. an ACE-Step
+                # readiness failure interpolating raw exception text — stay
+                # generic on the UI, per the stable-error-classes contract.
+                worker_state["error"] = (
+                    str(e)
+                    if isinstance(e, StartupPending)
+                    else "Worker unavailable; retrying"
+                )
             except Exception:
                 logger.exception(
                     "Worker startup failed; retrying in %ss",

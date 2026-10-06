@@ -1,11 +1,10 @@
 import logging
 import os
-from pathlib import Path
 
 from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from ..config import Settings
+from ..config import ENV_PATH, Settings
 from ..capacity import validate_max_concurrency, validate_schedule
 from ..comfyui_detect import (
     check_comfyui_url,
@@ -18,7 +17,8 @@ from .app import app, templates, worker_state, start_worker, stop_worker
 
 logger = logging.getLogger(__name__)
 
-ENV_PATH = Path.cwd() / ".env"
+# ENV_PATH comes from config: the install-relative .env, so the setup wizard
+# writes config where a service-started bridge (cwd = system dir) will find it.
 _PERSISTED_SETTINGS = frozenset(
     {
         "COMFYUI_BASE_PATH",
@@ -192,14 +192,32 @@ async def api_complete_setup(request: Request):
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
+def _current_worker_error():
+    """The operator-facing worker state, shared by the dashboard and /api/status.
+
+    The supervisor records an error only after a startup cycle FAILS; while a
+    cycle is still inside e.g. the 60s ComfyUI wait, the live worker knows
+    its own state — without this fallback the waiting message was visible
+    ~5s out of every ~65s."""
+    error = worker_state.get("error")
+    bridge = worker_state.get("bridge")
+    if not error and bridge is not None:
+        error = getattr(bridge, "status_message", None)
+    return error
+
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
         context={
+            # The template's "Setup Required" banner keys on this; without it
+            # Jinja saw an undefined (falsy) name and showed the banner even
+            # on a configured, registered worker.
+            "has_api_key": bool(Settings.GRID_API_KEY),
             "worker_running": worker_state["running"],
-            "worker_error": worker_state.get("error"),
+            "worker_error": _current_worker_error(),
         },
     )
 
@@ -213,7 +231,7 @@ async def api_status():
     advertised = list(getattr(bridge, "models", []) or []) if bridge is not None else []
     return {
         "worker_running": worker_state["running"],
-        "worker_error": worker_state.get("error"),
+        "worker_error": _current_worker_error(),
         "advertised": advertised,
         "config": {
             "has_api_key": bool(Settings.GRID_API_KEY),

@@ -41,11 +41,15 @@ def test_unsellable_names_is_case_insensitive_and_fail_open():
 
 @pytest.mark.parametrize("error_number", [errno.EADDRINUSE, 10048, 48])
 def test_port_conflict_exits_with_plain_explanation(monkeypatch, caplog, error_number):
+    import sys as _sys
+
     import uvicorn
 
     def bind_fails(*a, **k):
         raise OSError(error_number, "error while attempting to bind on address")
 
+    # main() now parses CLI flags; give it a bare invocation, not pytest's argv.
+    monkeypatch.setattr(_sys, "argv", ["comfy-bridge"])
     monkeypatch.setattr(uvicorn, "run", bind_fails)
     with pytest.raises(SystemExit) as exc:
         bridge_cli.main()
@@ -125,7 +129,10 @@ async def test_cold_start_discovers_models_after_inventory(monkeypatch, ready):
             assert worker.models == ["test-model"]
             session.assert_awaited_once()
         else:
-            with pytest.raises(RuntimeError, match="No servable models"):
+            # Empty inventory with a PASSING health check reads as "ComfyUI
+            # is up but has no model files", distinct from both "not running"
+            # and the genuine no-servable-models failure.
+            with pytest.raises(RuntimeError, match="no model files installed"):
                 await worker.run()
             session.assert_not_awaited()
     finally:

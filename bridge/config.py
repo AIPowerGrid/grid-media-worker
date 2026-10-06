@@ -2,14 +2,19 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
-
-# The bridge's install directory (the cloned repo). Defaults derived from it —
-# the workflows/ folder and the model-reference checkout — must not depend on
-# which directory the operator happens to launch `comfy-bridge` from: a
-# cwd-relative default silently empties the workflow map and drops the model
-# reference when started from anywhere else.
+# The bridge's install directory (the cloned repo). Everything derived from it —
+# the .env, the workflows/ folder, the model-reference checkout — must not
+# depend on which directory the operator happens to launch `comfy-bridge` from:
+# an auto-started service begins life in C:\Windows\System32 or /, where a
+# cwd-relative .env silently boots the bridge unconfigured.
 REPO_ROOT = Path(__file__).resolve().parent.parent
+ENV_PATH = REPO_ROOT / ".env"
+
+# Install-relative config first; then the historical cwd search as a fallback
+# for setups that keep their .env elsewhere (dotenv never overrides values that
+# are already set, so the install-relative file wins when both exist).
+load_dotenv(ENV_PATH)
+load_dotenv()
 
 
 class Settings:
