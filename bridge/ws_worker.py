@@ -227,6 +227,12 @@ class WSWorker:
         self.profile: dict | None = None
         self.direct_audio = False
         self._capacity_error: str | None = None
+        # Live startup phase, readable by /api/status while run() is still
+        # inside it. The supervisor's worker_state["error"] only carries a
+        # message AFTER a cycle fails — without this, the 60s ComfyUI wait
+        # showed "running, no error" and the authored waiting message was
+        # visible for only ~5s of every ~65s cycle.
+        self.status_message: str | None = None
 
     async def run(self):
         if websockets is None:
@@ -275,6 +281,11 @@ class WSWorker:
             if not Settings.GRID_TRUST_MODELS:
                 deadline = time.monotonic() + COMFY_MODELS_WAIT_S
                 while not model_mapper.available_files and time.monotonic() < deadline:
+                    self.status_message = (
+                        f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
+                        "not running or has not loaded models yet; the worker "
+                        "will keep checking"
+                    )
                     logger.info("Waiting for ComfyUI to finish loading its model list…")
                     await asyncio.sleep(3)
                     await initialize_model_mapper(Settings.COMFYUI_URL)
@@ -333,6 +344,7 @@ class WSWorker:
                 "ComfyUI weights. Install the model files (and a mapped workflow), "
                 "then restart. Candidates were: %s" % candidates
             )
+        self.status_message = None
         logger.info(f"WS worker advertising servable models: {self.models}")
         for name in unsellable_names(
             self.models, await fetch_priced_model_names(Settings.GRID_API_URL)

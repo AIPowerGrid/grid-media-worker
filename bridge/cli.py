@@ -36,8 +36,34 @@ def validated_bridge_host(value: object) -> str:
     return host
 
 
+def _ensure_streams(log_path=None):
+    """Give a windowless process real stdout/stderr.
+
+    Under pythonw.exe (the auto-start Run value) there is no console:
+    sys.stdout and sys.stderr are None, and the first write by logging or
+    uvicorn's formatter kills the bridge within a second — silently, because
+    there is nowhere to print the traceback. Append both streams to a logfile
+    next to the install instead, so a service start still leaves evidence.
+    """
+    import sys as _sys
+
+    if _sys.stdout is not None and _sys.stderr is not None:
+        return None
+    if log_path is None:
+        from .config import REPO_ROOT
+
+        log_path = REPO_ROOT / "bridge-service.log"
+    stream = open(log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+    if _sys.stdout is None:
+        _sys.stdout = stream
+    if _sys.stderr is None:
+        _sys.stderr = stream
+    return stream
+
+
 def main():
     """Entry point for `comfy-bridge` console script and `python -m bridge.cli`."""
+    _ensure_streams()
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
     )

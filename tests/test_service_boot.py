@@ -122,3 +122,73 @@ async def test_unservable_candidates_keep_the_no_servable_message(monkeypatch):
             await worker.run()
     finally:
         await worker.comfy.aclose()
+
+
+def test_windowless_process_gets_file_streams(monkeypatch, tmp_path):
+    """Under pythonw.exe stdout/stderr are None; the first logging write then
+    killed the bridge silently. _ensure_streams must give it a logfile."""
+    import sys as real_sys
+
+    from bridge import cli
+
+    monkeypatch.setattr(real_sys, "stdout", None)
+    monkeypatch.setattr(real_sys, "stderr", None)
+    log = tmp_path / "bridge-service.log"
+    stream = cli._ensure_streams(log)
+    try:
+        assert real_sys.stdout is stream and real_sys.stderr is stream
+        print("alive under pythonw")
+        real_sys.stdout.flush()
+        assert "alive under pythonw" in log.read_text()
+        assert real_sys.stdout.isatty() is False  # what crashed uvicorn before
+    finally:
+        stream.close()
+
+
+def test_ensure_streams_is_noop_with_a_console():
+    from bridge import cli
+
+    assert cli._ensure_streams() is None
+
+
+@pytest.mark.asyncio
+async def test_waiting_message_is_visible_during_the_wait(monkeypatch):
+    """The authored waiting text must be readable the WHOLE time the worker
+    sits in the ComfyUI wait loop — on the Windows box it showed in only 2 of
+    74 status samples because it existed solely in the post-failure window."""
+    import bridge.ws_worker as ws
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(Settings, "GRID_PROFILE_PATH", "")
+    monkeypatch.setattr(Settings, "GRID_MODELS", [])
+    monkeypatch.setattr(Settings, "GRID_TRUST_MODELS", False)
+    monkeypatch.setattr(Settings, "GRID_SCHEDULE", "")
+    monkeypatch.setattr(Settings, "THREADS", 1)
+    monkeypatch.setattr(ws, "COMFY_MODELS_WAIT_S", 60)
+    monkeypatch.setattr(ws.model_mapper, "available_files", set())
+    monkeypatch.setattr(ws, "initialize_model_mapper", AsyncMock())
+    worker = ws.WSWorker()
+    sampled = {}
+
+    async def sample_sleep(_d):
+        # What /api/status reports mid-wait, with no supervisor error set.
+        monkeypatch.setitem(web_app.worker_state, "error", None)
+        monkeypatch.setitem(web_app.worker_state, "bridge", worker)
+        monkeypatch.setitem(web_app.worker_state, "setup_complete", True)
+        body = (
+            TestClient(web_app.app, base_url="http://127.0.0.1:7860")
+            .get("/api/status")
+            .json()
+        )
+        sampled["error"] = body["worker_error"]
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ws.asyncio, "sleep", sample_sleep)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await worker.run()
+    finally:
+        await worker.comfy.aclose()
+    assert sampled["error"] and "Waiting for ComfyUI" in sampled["error"]

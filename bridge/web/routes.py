@@ -211,9 +211,16 @@ async def api_status():
     # it alone showed "models: []" on a worker advertising seven names.
     bridge = worker_state.get("bridge")
     advertised = list(getattr(bridge, "models", []) or []) if bridge is not None else []
+    # The supervisor records an error only after a startup cycle FAILS; while a
+    # cycle is still inside e.g. the 60s ComfyUI wait, the live worker knows
+    # its own state — without this fallback the waiting message was visible
+    # ~5s out of every ~65s.
+    error = worker_state.get("error")
+    if not error and bridge is not None:
+        error = getattr(bridge, "status_message", None)
     return {
         "worker_running": worker_state["running"],
-        "worker_error": worker_state.get("error"),
+        "worker_error": error,
         "advertised": advertised,
         "config": {
             "has_api_key": bool(Settings.GRID_API_KEY),
