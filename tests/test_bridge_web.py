@@ -31,6 +31,25 @@ def test_configured_bridge_pages_render(monkeypatch):
         assert response.headers["content-type"].startswith("text/html")
 
 
+def test_dashboard_setup_banner_follows_the_configured_key(monkeypatch):
+    """The "Setup Required" banner showed on every dashboard load: the route
+    never passed has_api_key, and Jinja treats the missing name as false."""
+    monkeypatch.setitem(web_app.worker_state, "setup_complete", True)
+    monkeypatch.setattr(Settings, "GRID_API_KEY", "configured-test-key")
+    assert "Setup Required" not in _client().get("/").text
+    monkeypatch.setattr(Settings, "GRID_API_KEY", "")
+    assert "Setup Required" in _client().get("/").text
+
+
+def test_dashboard_lists_advertised_models_not_only_requested(monkeypatch):
+    """Under auto-detect GRID_MODELS is empty, so the card read "None
+    configured" on a worker advertising seven models."""
+    monkeypatch.setitem(web_app.worker_state, "setup_complete", True)
+    page = _client().get("/").text
+    assert "status.advertised" in page
+    assert "None configured" not in page
+
+
 @pytest.mark.asyncio
 async def test_worker_supervisor_retries_startup_failure(monkeypatch):
     started_again = asyncio.Event()

@@ -212,6 +212,10 @@ async def dashboard(request: Request):
         request=request,
         name="dashboard.html",
         context={
+            # The template's "Setup Required" banner keys on this; without it
+            # Jinja saw an undefined (falsy) name and showed the banner even
+            # on a configured, registered worker.
+            "has_api_key": bool(Settings.GRID_API_KEY),
             "worker_running": worker_state["running"],
             "worker_error": _current_worker_error(),
         },

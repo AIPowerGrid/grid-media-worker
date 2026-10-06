@@ -35,16 +35,18 @@
     </div>
 
     <div class="card">
-      <h3>Models</h3>
-      <template x-if="status.config?.models?.length">
+      <h3>Advertised models</h3>
+      <template x-if="status.advertised?.length">
         <ul>
-          <template x-for="m in status.config.models" :key="m">
+          <template x-for="m in status.advertised" :key="m">
             <li x-text="m"></li>
           </template>
         </ul>
       </template>
-      <template x-if="!status.config?.models?.length">
-        <p>None configured</p>
+      <template x-if="!status.advertised?.length">
+        <p x-text="status.config?.models?.length
+          ? 'None yet (requested: ' + status.config.models.join(', ') + ')'
+          : 'None yet'"></p>
       </template>
     </div>
 
