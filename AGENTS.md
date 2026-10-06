@@ -79,7 +79,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 - `.github/ISSUE_TEMPLATE/media-manager-qualification.yml` recruits hardware
   qualification candidates while explicitly forbidding private reports and
   credentials in public issues. The operator runbook is
-  `docs/MANAGER_QUALIFICATION.md`. `docs/qualification-status.json` is the
+  `docs/MANAGER_QUALIFICATION.md`. `docs/windows-autostart.md` is the operator
+  guide for bridge/ComfyUI auto-start; its PowerShell commands must work from
+  a non-admin prompt. `docs/qualification-status.json` is the
   versioned, machine-readable public evidence count; it must stay bound to the
   exact draft profile hash and may advance only after maintainer acceptance of
   a complete public/private evidence pair.

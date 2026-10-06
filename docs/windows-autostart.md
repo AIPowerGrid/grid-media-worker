@@ -14,8 +14,9 @@ From your grid-media-worker folder (any terminal, no admin rights needed):
 
 That's it. The bridge now starts every time you sign in to Windows, invisibly
 (the install records your venv's `pythonw.exe` — the windowless Python — so no
-console window appears; the bridge's output lives on its dashboard, not in a
-terminal), and waits for ComfyUI if it isn't up yet. Check it at
+console window appears; the bridge's status lives on its dashboard and its log
+in `bridge-service.log` in this folder), and waits for ComfyUI if it isn't up
+yet. Check it at
 http://127.0.0.1:7860 — while ComfyUI is still starting, the dashboard says so.
 
 - Status:  `.venv\Scripts\python.exe -m bridge.cli --service-status`
@@ -24,7 +25,7 @@ http://127.0.0.1:7860 — while ComfyUI is still starting, the dashboard says so
 What it actually does: writes one registry value under
 `HKCU\...\CurrentVersion\Run` — the same mechanism apps use for "start with
 Windows". It runs as your user at sign-in. It does not restart on a crash and
-does not run before you sign in; if you want those, see the Task Scheduler
+does not run before you sign in; for crash restarts, see the Task Scheduler
 alternative at the bottom.
 
 ## 2. ComfyUI: pick your flavor
@@ -34,14 +35,23 @@ its own auto-start:
 
 **ComfyUI Desktop:** Settings → check "Launch at startup" (that's all).
 
-**ComfyUI portable:** create one Scheduled Task (run in PowerShell, adjust the
-path to your install):
+**ComfyUI portable:** create one Scheduled Task for your user (run in
+PowerShell, no admin rights needed; adjust `$dir` to your install):
 
 ```powershell
-schtasks /Create /TN "ComfyUI" /SC ONLOGON /TR "C:\ComfyUI_windows_portable\run_nvidia_gpu.bat" /F
+$dir = "C:\ComfyUI_windows_portable"
+Register-ScheduledTask -TaskName "ComfyUI" -Force `
+  -Trigger (New-ScheduledTaskTrigger -AtLogOn -User "$env:USERDOMAIN\$env:USERNAME") `
+  -Action (New-ScheduledTaskAction -Execute "$dir\run_nvidia_gpu.bat" -WorkingDirectory $dir) `
+  -Settings (New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries)
 ```
 
-Remove later with `schtasks /Delete /TN "ComfyUI" /F`.
+The working directory matters: the portable `.bat` uses paths relative to its
+folder. `ExecutionTimeLimit` zero lifts Task Scheduler's default 72-hour limit,
+which would otherwise stop ComfyUI after three days. (`schtasks /Create /SC
+ONLOGON` needs an administrator prompt — it registers an any-user trigger.)
+
+Remove later with `Unregister-ScheduledTask -TaskName "ComfyUI" -Confirm:$false`.
 
 ## Order doesn't matter
 
@@ -53,19 +63,28 @@ minutes after login — no interaction needed.
 
 ## Task Scheduler alternative for the bridge (optional)
 
-The Run-key install is the simple path. If you want the bridge to also restart
-after a crash, use a Scheduled Task instead (and `--uninstall-service` first so
-they don't double-start):
-
-Run in PowerShell (one line; the outer single quotes keep the inner doubles
-intact — in classic cmd.exe use `schtasks /?` quoting instead):
+The Run-key install is the simple path. If you want the bridge to also come
+back after a crash, use a Scheduled Task instead (and `--uninstall-service`
+first so they don't double-start). Run in PowerShell from your
+grid-media-worker folder, no admin rights needed:
 
 ```powershell
-schtasks /Create /TN "GridMediaBridge" /SC ONLOGON /TR '"C:\path\to\grid-media-worker\.venv\Scripts\pythonw.exe" -m bridge.cli' /F
+$py = (Resolve-Path ".venv\Scripts\pythonw.exe").Path
+$me = "$env:USERDOMAIN\$env:USERNAME"
+$watchdog = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 5)
+Register-ScheduledTask -TaskName "GridMediaBridge" -Force `
+  -Trigger @((New-ScheduledTaskTrigger -AtLogOn -User $me), $watchdog) `
+  -Action (New-ScheduledTaskAction -Execute $py -Argument "-m bridge.cli" -WorkingDirectory (Get-Location).Path) `
+  -Settings (New-ScheduledTaskSettingsSet -MultipleInstances IgnoreNew -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries)
 ```
 
-Then in Task Scheduler (taskschd.msc) open the task's Settings tab and enable
-"If the task fails, restart every 1 minute".
+How the restart works: the second trigger fires every 5 minutes while you are
+signed in. If the bridge is still running, `IgnoreNew` skips that run; if it
+has exited, the bridge starts again — so a crash costs at most 5 minutes. (Task
+Scheduler's own "If the task fails, restart" setting does not help here: it
+covers a task that fails to launch, not a program that exits with an error.)
+
+Remove later with `Unregister-ScheduledTask -TaskName "GridMediaBridge" -Confirm:$false`.
 
 ## Verify the whole thing once
 
