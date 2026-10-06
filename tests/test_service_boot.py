@@ -257,3 +257,24 @@ async def test_first_inventory_fetch_already_reports_waiting(monkeypatch):
     finally:
         await worker.comfy.aclose()
     assert sampled["message"] and "Waiting for ComfyUI" in sampled["message"]
+
+
+def test_dashboard_first_render_shows_live_waiting_state(monkeypatch):
+    """The dashboard's server-rendered state must match /api/status: during
+    the wait the supervisor error is empty and only the worker knows."""
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+
+    message = "Waiting for ComfyUI at http://127.0.0.1:8188 — connecting"
+    monkeypatch.setitem(web_app.worker_state, "error", None)
+    monkeypatch.setitem(
+        web_app.worker_state, "bridge",
+        SimpleNamespace(status_message=message, models=[]),
+    )
+    monkeypatch.setitem(web_app.worker_state, "setup_complete", True)
+    client = TestClient(web_app.app, base_url="http://127.0.0.1:7860")
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "Waiting for ComfyUI" in page.text
+    assert client.get("/api/status").json()["worker_error"] == message
