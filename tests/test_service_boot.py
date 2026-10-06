@@ -170,6 +170,10 @@ async def test_waiting_message_is_visible_during_the_wait(monkeypatch):
     monkeypatch.setattr(ws.model_mapper, "available_files", set())
     monkeypatch.setattr(ws, "initialize_model_mapper", AsyncMock())
     worker = ws.WSWorker()
+    monkeypatch.setattr(
+        worker, "_check_runtime_health",
+        AsyncMock(side_effect=httpx.ConnectError("refused")),
+    )
     sampled = {}
 
     async def sample_sleep(_d):
@@ -192,3 +196,36 @@ async def test_waiting_message_is_visible_during_the_wait(monkeypatch):
     finally:
         await worker.comfy.aclose()
     assert sampled["error"] and "Waiting for ComfyUI" in sampled["error"]
+
+
+@pytest.mark.asyncio
+async def test_reachable_comfyui_without_weights_is_not_reported_as_down(monkeypatch):
+    """ComfyUI answering /system_stats with an empty inventory must read as
+    "running but has no model files", not "not running", for the whole wait —
+    the empty-inventory loop used to say "not running" ~90% of the time."""
+    import bridge.ws_worker as ws
+
+    monkeypatch.setattr(Settings, "GRID_PROFILE_PATH", "")
+    monkeypatch.setattr(Settings, "GRID_MODELS", [])
+    monkeypatch.setattr(Settings, "GRID_TRUST_MODELS", False)
+    monkeypatch.setattr(Settings, "GRID_SCHEDULE", "")
+    monkeypatch.setattr(Settings, "THREADS", 1)
+    monkeypatch.setattr(ws, "COMFY_MODELS_WAIT_S", 60)
+    monkeypatch.setattr(ws.model_mapper, "available_files", set())
+    monkeypatch.setattr(ws, "initialize_model_mapper", AsyncMock())
+    worker = ws.WSWorker()
+    monkeypatch.setattr(worker, "_check_runtime_health", AsyncMock())
+    sampled = {}
+
+    async def sample_sleep(_d):
+        sampled["message"] = worker.status_message
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(ws.asyncio, "sleep", sample_sleep)
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await worker.run()
+    finally:
+        await worker.comfy.aclose()
+    assert "running but has no model files installed yet" in sampled["message"]
+    assert "not running" not in sampled["message"]

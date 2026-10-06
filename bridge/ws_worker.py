@@ -272,6 +272,9 @@ class WSWorker:
                 api_key=Settings.ACE_STEP_API_KEY,
             )
         else:
+            # Covers the first inventory fetch, so a fresh supervisor cycle
+            # never shows an empty status between two waiting messages.
+            self.status_message = f"Connecting to ComfyUI at {Settings.COMFYUI_URL}…"
             await initialize_model_mapper(Settings.COMFYUI_URL)
             # ComfyUI answers HTTP before its model scan finishes, so a first
             # pass can see zero files and the whole startup used to abort with
@@ -281,11 +284,24 @@ class WSWorker:
             if not Settings.GRID_TRUST_MODELS:
                 deadline = time.monotonic() + COMFY_MODELS_WAIT_S
                 while not model_mapper.available_files and time.monotonic() < deadline:
-                    self.status_message = (
-                        f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
-                        "not running or has not loaded models yet; the worker "
-                        "will keep checking"
-                    )
+                    # An empty inventory alone cannot tell "ComfyUI is down"
+                    # from "ComfyUI is up with no weights" — the file fetch
+                    # swallows connection errors — so probe health to show the
+                    # operator the right one of the two authored states.
+                    try:
+                        await self._check_runtime_health()
+                        self.status_message = (
+                            f"ComfyUI at {Settings.COMFYUI_URL} is running but has "
+                            "no model files installed yet — add weights to "
+                            "ComfyUI's models folders (checkpoints, vae, …); the "
+                            "worker will keep checking"
+                        )
+                    except (httpx.HTTPError, OSError):
+                        self.status_message = (
+                            f"Waiting for ComfyUI at {Settings.COMFYUI_URL} — it is "
+                            "not running or not responding yet; the worker will "
+                            "keep checking"
+                        )
                     logger.info("Waiting for ComfyUI to finish loading its model list…")
                     await asyncio.sleep(3)
                     await initialize_model_mapper(Settings.COMFYUI_URL)

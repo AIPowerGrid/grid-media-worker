@@ -94,6 +94,9 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 - Legacy ComfyUI startup retries an empty weight inventory before selecting
   automatic candidates. An empty inventory never authorizes registration.
   Default workflows resolve relative to the installation; explicit paths win.
+  While waiting, `WSWorker.status_message` (surfaced by `/api/status`) names
+  the live state, probing ComfyUI health to tell "not running or not
+  responding yet" from "running but has no model files installed yet".
 - The startup pricing check is advisory, includes priced aliases, and stays
   silent when the public price book cannot be read. It is not an admission gate.
 - Managed-profile mode requires an active signed profile, matching install
