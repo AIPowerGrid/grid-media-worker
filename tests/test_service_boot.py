@@ -278,3 +278,46 @@ def test_dashboard_first_render_shows_live_waiting_state(monkeypatch):
     assert page.status_code == 200
     assert "Waiting for ComfyUI" in page.text
     assert client.get("/api/status").json()["worker_error"] == message
+
+
+def test_service_log_rotates_and_stays_capped(tmp_path):
+    """bridge-service.log used to grow forever; it must rotate like
+    RotatingFileHandler and keep at most (1 + backups) bounded files."""
+    from bridge import cli
+
+    log = tmp_path / "bridge-service.log"
+    stream = cli._RotatingLogStream(log, max_bytes=1000, backups=2)
+    try:
+        for i in range(200):  # ~10 KB through a 1 KB cap
+            stream.write(f"line {i:04d} " + "x" * 40 + "\n")
+    finally:
+        stream.close()
+    files = sorted(p.name for p in tmp_path.iterdir())
+    assert files == [
+        "bridge-service.log", "bridge-service.log.1", "bridge-service.log.2",
+    ]
+    for p in tmp_path.iterdir():
+        assert p.stat().st_size < 1000 + 100  # cap plus at most one write
+    kept = "".join(p.read_text(encoding="utf-8") for p in tmp_path.iterdir())
+    assert "line 0199" in kept  # newest lines are kept…
+    assert "line 0000" not in kept  # …and the oldest were rotated away
+
+
+def test_service_log_survives_a_failed_rollover(tmp_path, monkeypatch):
+    """A rollover can fail on Windows while another program holds the file;
+    the bridge must keep logging rather than crash on print()."""
+    from bridge import cli
+
+    log = tmp_path / "bridge-service.log"
+    stream = cli._RotatingLogStream(log, max_bytes=100, backups=1)
+
+    def locked():
+        raise PermissionError("file in use")
+
+    monkeypatch.setattr(stream._handler, "doRollover", locked)
+    try:
+        for i in range(20):
+            assert stream.write(f"still alive {i}\n") > 0
+    finally:
+        stream.close()
+    assert "still alive 19" in log.read_text(encoding="utf-8")

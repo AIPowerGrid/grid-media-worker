@@ -15,8 +15,8 @@ From your grid-media-worker folder (any terminal, no admin rights needed):
 That's it. The bridge now starts every time you sign in to Windows, invisibly
 (the install records your venv's `pythonw.exe` — the windowless Python — so no
 console window appears; the bridge's status lives on its dashboard and its log
-in `bridge-service.log` in this folder), and waits for ComfyUI if it isn't up
-yet. Check it at
+in `bridge-service.log` in this folder — rotated at 5 MB, with the last three
+kept as `.1`–`.3`), and waits for ComfyUI if it isn't up yet. Check it at
 http://127.0.0.1:7860 — while ComfyUI is still starting, the dashboard says so.
 
 - Status:  `.venv\Scripts\python.exe -m bridge.cli --service-status`

@@ -30,6 +30,8 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   commitments, local hardware detection, and recommendation. Owned in its own
   AGENTS.md.
 - `utils.py` — seed + media encoding helpers. `cli.py` — console entry; launches the web app.
+  Without a console (pythonw service start) it routes stdout/stderr to the
+  install-relative `bridge-service.log`, rotated at 5 MB with three backups.
 - `image_output.py` - validates/re-encodes PNG, WebP, and JPEG outputs to match
   signed upload content types; receipts hash the uploaded bytes.
 - `loras.py` - source/sink-checked recipe LoRA injection, local safetensors

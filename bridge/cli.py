@@ -36,14 +36,69 @@ def validated_bridge_host(value: object) -> str:
     return host
 
 
+# The windowless service log is capped: at most (1 + backups) files of
+# SERVICE_LOG_MAX_BYTES each, so an always-on rig cannot fill its disk.
+SERVICE_LOG_MAX_BYTES = 5 * 1024 * 1024
+SERVICE_LOG_BACKUPS = 3
+
+
+class _RotatingLogStream:
+    """A sys.stdout/sys.stderr replacement that rotates like
+    RotatingFileHandler (bridge-service.log -> .1 -> .2 …).
+
+    Rotation must happen at the stream, not only in a logging handler:
+    print() calls and uvicorn's own handlers write to the streams directly.
+    """
+
+    def __init__(self, path, max_bytes=SERVICE_LOG_MAX_BYTES,
+                 backups=SERVICE_LOG_BACKUPS):
+        import threading
+        from logging.handlers import RotatingFileHandler
+
+        self._handler = RotatingFileHandler(
+            path, maxBytes=max_bytes, backupCount=backups,
+            encoding="utf-8", errors="replace",
+        )
+        self._max_bytes = max_bytes
+        self._lock = threading.Lock()
+
+    def write(self, text):
+        with self._lock:
+            handler = self._handler
+            if handler.stream is None:  # a previous rollover failed midway
+                handler.stream = handler._open()
+            handler.stream.write(text)
+            handler.stream.flush()
+            if handler.stream.tell() >= self._max_bytes:
+                try:
+                    handler.doRollover()
+                except OSError:
+                    # e.g. a viewer holds the file open on Windows; keep
+                    # appending and retry the rollover on a later write.
+                    pass
+        return len(text)
+
+    def flush(self):
+        with self._lock:
+            if self._handler.stream is not None:
+                self._handler.stream.flush()
+
+    def isatty(self):
+        return False
+
+    def close(self):
+        self._handler.close()
+
+
 def _ensure_streams(log_path=None):
     """Give a windowless process real stdout/stderr.
 
     Under pythonw.exe (the auto-start Run value) there is no console:
     sys.stdout and sys.stderr are None, and the first write by logging or
     uvicorn's formatter kills the bridge within a second — silently, because
-    there is nowhere to print the traceback. Append both streams to a logfile
-    next to the install instead, so a service start still leaves evidence.
+    there is nowhere to print the traceback. Send both streams to a rotating
+    logfile next to the install instead, so a service start still leaves
+    evidence without growing forever.
     """
     import sys as _sys
 
@@ -53,7 +108,7 @@ def _ensure_streams(log_path=None):
         from .config import REPO_ROOT
 
         log_path = REPO_ROOT / "bridge-service.log"
-    stream = open(log_path, "a", buffering=1, encoding="utf-8", errors="replace")
+    stream = _RotatingLogStream(log_path)
     if _sys.stdout is None:
         _sys.stdout = stream
     if _sys.stderr is None:
