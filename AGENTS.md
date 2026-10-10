@@ -109,6 +109,12 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   never promotes it to qualification or advertisement.
 - **No standing storage creds on the worker.** Outputs upload only to
   Grid-issued presigned URLs from the job message.
+- **Durable async video remains a candidate:** `bridge/render_journal.py`
+  persists a single governed video's ComfyUI identity and bounded MP4 cache
+  before upload. Enable its private directory only for isolated qualification;
+  registration does not advertise `async-video-resume-v1`. Core reconnect
+  authorization, retention, restart and money/storage canaries must pass before
+  public async admission. Local state cannot authorize a charge or payout.
 - **All config is env-driven** through `bridge/config.py` (`Settings`); the UI persists changes
   to `.env`. `GRID_API_KEY` is required.
 - **Worker profiles are fail-closed:** `bridge/profiles/` validates signed,

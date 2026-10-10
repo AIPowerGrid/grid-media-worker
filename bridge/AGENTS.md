@@ -15,6 +15,12 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   `videos`/`video` entries and Video Helper Suite's legacy `gifs` key, which may
   contain MP4 output. A completed prompt without a supported output fails
   immediately; a bounded timeout interrupts a genuinely stuck prompt.
+- **Candidate video recovery:** `render_journal.py` - private SQLite execution
+  identity and MP4 byte cache for marked, single-video recipe jobs. Persist
+  the preassigned prompt ID and submitting state before the sole `/prompt`
+  POST. ComfyUI accepts that ID but does not deduplicate submissions. Unknown
+  acceptance can only observe the saved ID; never POST again or interrupt
+  a shared runtime. Recover cached bytes before upload/DONE retries.
 - **Mapping:** `model_mapper.py` — grid model name → workflow filename (`DEFAULT_WORKFLOW_MAP`
   + img2img map), and checkpoint-file → grid-name resolution via the local model reference.
 - **Templating:** `workflow.py` — two paths. `build_recipe_workflow(job, payload)` executes a
@@ -61,6 +67,41 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 - Registration advertises `recipe-image-bindings-v1` for Core's multi-reference
   dispatch compatibility check. This does not attest execution or model fidelity.
   Multiple sources without explicit bindings fail, never fall back to one image.
+- No worker release yet advertises `async-video-resume-v1`. A marked video
+  requires `GRID_COMFYUI_STATE_DIR`, a loopback runtime, one MP4 upload slot,
+  one Core-assigned seed and a governed ComfyUI recipe; LoRAs and batches are
+  not supported in this candidate path. Legacy requests are unchanged.
+  The ComfyUI submission/polling client ignores ambient HTTP proxies; validate
+  its actual base URL, not a changed Settings value, before durable execution.
+  The future Core reconnect delivery must set top-level `resume: true` without
+  changing the immutable payload. Missing local render identity on a resume
+  fails uncertain before graph construction; never treat lost state as a new
+  render. This worker guard does not implement Core's authorization handoff.
+- The candidate journal is namespaced to worker name, Grid endpoint, ComfyUI
+  endpoint and credential hash. Keep each GPU's state separate; credential or
+  endpoint changes require operator reconciliation, never deletion to rerender.
+  POSIX requires operator-owned `0700` directories and `0600` regular files;
+  Windows ACL/crash qualification remains a release gate. No raw prompt,
+  graph, credential or upload URL is stored in the journal. Generated MP4s are
+  private user content, not public validator evidence.
+- Bind both the exact submitted graph hash and a pre-submission exact-number
+  normalized hash. ComfyUI FLOAT validation changes `24` to `24.0`; only safe
+  integral floats normalize. Booleans, strings, fractions, different nodes,
+  paths and parameters must still conflict. Old rows never infer a missing
+  normalized commitment from returned history.
+- Cache expected byte hash/size before atomic rename and fsync. Enforce
+  256 KiB commitments, 4 MiB observations, 256 MiB per MP4, 1 GiB aggregate
+  cache and 1024 tombstones. ACK retains identity/bytes; there is no automatic
+  pruning yet. At capacity, stop/reconcile rather than forgetting a render.
+  Retention and Core-bound continuation are required before advertisement.
+- A definite backend rejection/execution or invalid completed-output failure
+  may send a generic error. Unknown transport, cache or delivery failures close
+  the WebSocket without a terminal failure/refund request. Core owns financial
+  expiry and must independently authorize/settle the original execution.
+- Native ComfyUI SaveVideo uses an `images` envelope for MP4 output. Video
+  collection recognizes it without image re-encoding; the candidate cache
+  still validates MP4 magic and bounds. This is not codec, quality or fidelity
+  certification; live qualification must inspect the actual video/audio.
 - Requested recipe LoRAs must resolve and inject or the job fails before
   rendering. Missing injection maps never silently drop a requested modifier.
   The `done.loras` list reports filenames, not model-fidelity proof. Downloads

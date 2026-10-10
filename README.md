@@ -77,6 +77,34 @@ models only — image and video models never appear there. The legacy poll-based
 API from before the demand-billing launch is retired and answers `410 Gone`;
 all submission goes through `/v1/*`.
 
+## Candidate async video recovery
+
+This branch contains an isolated single-video execution journal, not a public
+async-video release. Normal workers do not advertise resume support. Core's
+async admission must remain off until reconnect authorization, retention and
+paid storage/restart canaries pass together.
+
+For qualification, set `GRID_COMFYUI_STATE_DIR` to a private, persistent directory
+outside the source checkout, unique to the worker and local ComfyUI instance.
+On POSIX it must be owned by the operator with `0700` permissions; the journal
+and MP4 cache use `0600` files. Do not remove it to retry a job. Changing the
+worker name, credential or endpoint requires reconciliation of retained work.
+Windows ACL and crash behavior are not yet qualified.
+
+Marked, Core-governed videos save a ComfyUI prompt ID before submission, then
+observe that same ID after a lost reply or restart. An uncertain acceptance is
+never submitted again: ComfyUI's requested prompt ID is not an idempotency key.
+Finished MP4 bytes are hash-verified and cached before presigned upload and DONE.
+Native SaveVideo's MP4-in-`images` output is supported. Uncertain delivery closes
+the connection; only Core can decide refunds, completion and worker rewards.
+
+The cache is bounded to 256 MiB per MP4 and 1 GiB total, with 1024 retained job
+identities. ACK does not prune files or tombstones. At capacity the worker stops
+this path for operator review; an automatic retention policy is still required.
+Raw prompts, graphs, credentials and upload URLs are not stored in the journal;
+cached videos remain private user content. Batch/LoRA and shared remote runtimes
+are not supported by this candidate path.
+
 ## Serving a listed model: use GRID_PREFLIGHT
 
 For recipe-backed ComfyUI jobs, the workflow comes from the grid's reviewed

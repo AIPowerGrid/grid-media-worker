@@ -22,6 +22,13 @@ and the WebSocket worker.
   and extra outputs must not become a successful result.
   Recipe batches also prove independent arbitrary seeds, unique output prefixes,
   input preservation, and no uploads when a later render fails.
+- `test_render_journal.py` - actual local SQLite multi-process submit-once
+  guards, private state, bounds, immutable request/runtime identity, retained
+  byte integrity, rename/commit crash recovery, expired/uncertain acceptance,
+  exact-number graph normalization and native SaveVideo output. Mocked HTTP
+  and WS cases prove lost-reply/restart recovery and re-upload after PUT/DONE
+  failure without a second render. These do not prove Core reconnect routing,
+  R2 settlement, Windows ACLs or GPU fidelity. The feature stays unadvertised.
 - `test_model_mapper.py` - model-reference resolution, capability inventory,
   and retired-capability advertisement guards.
 - `test_worker_identity.py` - worker-key custody, payout-wallet delegation,

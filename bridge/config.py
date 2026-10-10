@@ -23,6 +23,9 @@ class Settings:
     GRID_WORKER_NAME = os.getenv("GRID_WORKER_NAME", "ComfyUI-Bridge-Worker")
     COMFYUI_URL = os.getenv("COMFYUI_URL", "http://127.0.0.1:8188")
     COMFYUI_JOB_TIMEOUT = int(os.getenv("GRID_COMFYUI_JOB_TIMEOUT", "720"))
+    # Private candidate recovery journal/cache, one directory per worker/GPU.
+    # Does not advertise async-video-resume-v1 or enable Core admission.
+    GRID_COMFYUI_STATE_DIR = os.getenv("GRID_COMFYUI_STATE_DIR", "").strip()
     # Optional escape hatch for isolated custom-node processes that ignore
     # ComfyUI's /interrupt. Empty by default so unrelated processes are never
     # killed unless the worker operator opts into a narrow command-line pattern.

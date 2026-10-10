@@ -42,6 +42,10 @@ bridge_log.txt
 Thumbs.db
 .venv/
 
+# Private candidate video journal/cache; keep configured state outside the repo.
+.aipg-render-state/
+renders.sqlite3*
+
 # Standalone-manager build output
 *.spec
 !grid-media-manager.spec
