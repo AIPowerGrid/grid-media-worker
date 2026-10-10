@@ -80,6 +80,12 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   attempt-isolated upload slots. Its private execution token is not a worker
   credential or wire field. Joint qualification remains required; this worker
   guard does not itself implement or prove Core's authorization handoff.
+  Core's candidate async terminal now source-conditionally copies the MP4 to
+  a unique key the worker cannot write, then hashes those bytes before payment.
+  DONE must report the exact uploaded/cache digest; the mutable PUT slot is
+  not the final paid-result URL. Invalid bytes can release only the owning
+  lease's hold; storage uncertainty cannot authorize payment or ACK. This
+  byte-integrity contract is not codec/quality/fidelity or live R2 proof.
 - The candidate journal is namespaced to Core's account-owned worker UUID from
   the authenticated ready frame, worker name, Grid endpoint and ComfyUI endpoint.
   Missing/invalid worker IDs fail closed. Reconnect resets the local journal

@@ -104,6 +104,12 @@ local identity refuses instead of creating another render. Core's synthetic
 crash tests and the worker's separate native smoke test are not joint paid
 GPU/R2 qualification.
 
+Core's candidate paid terminal copies the upload to a unique worker-unwritable
+key and hashes that copy before settlement. The DONE digest must match the
+cached/uploaded bytes. The paid result is that frozen copy, not the worker's
+still-valid PUT slot. Storage uncertainty leaves the hold recoverable without
+ACK; byte integrity is not model-fidelity or video-quality certification.
+
 The cache is bounded to 256 MiB per MP4 and 1 GiB total, with 1024 retained job
 identities. ACK does not prune files or tombstones. At capacity the worker stops
 this path for operator review; an automatic retention policy is still required.
