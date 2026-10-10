@@ -23,6 +23,7 @@ import ssl
 import time
 from typing import Any, cast
 from urllib.parse import urlencode, urlsplit
+from uuid import UUID
 
 import httpx
 
@@ -229,6 +230,7 @@ class WSWorker:
         self.direct_audio = False
         self._capacity_error: str | None = None
         self._render_journal: RenderJournal | None = None
+        self._grid_worker_id: str | None = None
 
     async def run(self):
         if websockets is None:
@@ -343,6 +345,8 @@ class WSWorker:
             ready = json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
             if ready.get("type") != "ready":
                 raise RuntimeError(f"Registration rejected: {ready}")
+            self._grid_worker_id = ready.get("worker_id")
+            self._render_journal = None
             logger.info(f"Registered as worker {ready.get('worker_id')}")
 
             health_task = asyncio.create_task(self._monitor_runtime_health())
@@ -566,17 +570,26 @@ class WSWorker:
             or origin.fragment
         ):
             raise RenderFailed("Durable ComfyUI must be a private loopback runtime")
+        worker_id = self._grid_worker_id
+        if not isinstance(worker_id, str):
+            raise RenderUncertain("Durable video requires Core's registered worker identity")
+        try:
+            if str(UUID(worker_id)) != worker_id:
+                raise ValueError("Noncanonical UUID")
+        except ValueError as exc:
+            raise RenderUncertain("Invalid registered Core worker identity") from exc
+        namespace = digest({
+            "comfy": str(self.comfy.base_url), "grid": grid_ws_url(),
+            "worker": Settings.GRID_WORKER_NAME, "worker_id": worker_id,
+        })
         journal = self._render_journal
         if journal is None:
-            namespace = digest({
-                "comfy": str(self.comfy.base_url), "grid": grid_ws_url(),
-                "worker": Settings.GRID_WORKER_NAME,
-                "credential_hash": hashlib.sha256(Settings.GRID_API_KEY.encode()).hexdigest(),
-            })
             journal = await asyncio.to_thread(
                 RenderJournal, Settings.GRID_COMFYUI_STATE_DIR, namespace=namespace,
             )
             self._render_journal = journal
+        elif journal.namespace != namespace:
+            raise RenderUncertain("Retained render state belongs to another runtime/worker")
         binding = digest({"job_type": "video", "model": msg["model"], "payload": payload})
 
         async def build() -> dict[str, Any]:

@@ -77,13 +77,17 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   changing the immutable payload. Missing local render identity on a resume
   fails uncertain before graph construction; never treat lost state as a new
   render. This worker guard does not implement Core's authorization handoff.
-- The candidate journal is namespaced to worker name, Grid endpoint, ComfyUI
-  endpoint and credential hash. Keep each GPU's state separate; credential or
-  endpoint changes require operator reconciliation, never deletion to rerender.
+- The candidate journal is namespaced to Core's account-owned worker UUID from
+  the authenticated ready frame, worker name, Grid endpoint and ComfyUI endpoint.
+  Missing/invalid worker IDs fail closed. Reconnect resets the local journal
+  handle so its owner is rechecked. API-key rotation within the same Core worker
+  identity does not invalidate the cache; changing identity/name/endpoints
+  requires operator reconciliation, never deletion to rerender. Keep each GPU's
+  state separate.
   POSIX requires operator-owned `0700` directories and `0600` regular files;
   Windows ACL/crash qualification remains a release gate. No raw prompt,
-  graph, credential or upload URL is stored in the journal. Generated MP4s are
-  private user content, not public validator evidence.
+  graph, credential, secret-derived identifier or upload URL is stored in the
+  journal. Generated MP4s are private user content, not public validator evidence.
 - Bind both the exact submitted graph hash and a pre-submission exact-number
   normalized hash. ComfyUI FLOAT validation changes `24` to `24.0`; only safe
   integral floats normalize. Booleans, strings, fractions, different nodes,

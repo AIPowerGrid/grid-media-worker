@@ -137,6 +137,7 @@ class RenderJournal:
 
     def __init__(self, directory: str | Path, *, namespace: str) -> None:
         namespace = _hash(namespace)
+        self.namespace = namespace
         self.directory = Path(directory).expanduser().absolute()
         self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
         _private(self.directory, directory=True)

@@ -88,7 +88,8 @@ For qualification, set `GRID_COMFYUI_STATE_DIR` to a private, persistent directo
 outside the source checkout, unique to the worker and local ComfyUI instance.
 On POSIX it must be owned by the operator with `0700` permissions; the journal
 and MP4 cache use `0600` files. Do not remove it to retry a job. Changing the
-worker name, credential or endpoint requires reconciliation of retained work.
+Core worker identity, worker name or endpoint requires reconciliation of retained
+work. API-key rotation for the same registered worker preserves its cache.
 Windows ACL and crash behavior are not yet qualified.
 
 Marked, Core-governed videos save a ComfyUI prompt ID before submission, then

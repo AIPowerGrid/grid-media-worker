@@ -3,6 +3,7 @@
 
 """Actual local SQLite crash/race proofs; HTTP/GPU/storage remain synthetic."""
 
+import asyncio
 import copy
 import hashlib
 import json
@@ -311,6 +312,7 @@ async def test_lost_acceptance_reply_recovers_same_prompt_with_one_post(journal)
     assert rendered[0] == VIDEO
     assert post.call_count == 1
     build.assert_awaited_once()
+
     another_build.assert_not_awaited()
 
 
@@ -600,6 +602,8 @@ async def test_actual_ws_job_recovers_cached_bytes_on_new_worker(
     state_dir = tmp_path / "worker-state"
     monkeypatch.setattr(Settings, "GRID_COMFYUI_STATE_DIR", str(state_dir))
     worker, socket = WSWorker(), AsyncMock()
+    core_worker_id = str(uuid4())
+    worker._grid_worker_id = core_worker_id
 
     def accepted(request):
         assert worker._render_journal.get(job["id"]).phase == "submitting"
@@ -632,6 +636,8 @@ async def test_actual_ws_job_recovers_cached_bytes_on_new_worker(
         await worker.comfy.aclose()
     assert first_upload.call_count == 1
     second, recovered_socket = WSWorker(), AsyncMock()
+    second._grid_worker_id = core_worker_id
+    monkeypatch.setattr(Settings, "GRID_API_KEY", "rotated-synthetic-noncredential")
     job["upload"][0]["put_url"] = "https://storage.example/fresh"
     job["resume"] = True
     fresh_upload = respx.put("https://storage.example/fresh").mock(
@@ -652,6 +658,18 @@ async def test_actual_ws_job_recovers_cached_bytes_on_new_worker(
         second._render_journal.acknowledge(job["id"])
     finally:
         await second.comfy.aclose()
+    assert post.call_count == 1
+    build.assert_awaited_once()
+
+    other, other_socket = WSWorker(), AsyncMock()
+    other._grid_worker_id = str(uuid4())
+    try:
+        with pytest.raises(RenderUncertain):
+            await other._handle_job(other_socket, job)
+        other_socket.send.assert_not_awaited()
+        other_socket.close.assert_awaited_once()
+    finally:
+        await other.comfy.aclose()
     assert post.call_count == 1
     build.assert_awaited_once()
 
@@ -687,6 +705,7 @@ async def test_core_resume_with_missing_local_identity_never_renders(
         ],
     }
     worker, socket = WSWorker(), AsyncMock()
+    worker._grid_worker_id = str(uuid4())
     try:
         with pytest.raises(RenderUncertain):
             await worker._handle_job(socket, job)
@@ -705,6 +724,93 @@ async def test_comfy_submission_client_does_not_use_environment_proxy(monkeypatc
     worker = WSWorker()
     try:
         assert worker.comfy.trust_env is False
+    finally:
+        await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
+async def test_authenticated_ready_captures_core_identity_and_rechecks_journal(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(Settings, "GRID_API_KEY", "synthetic-noncredential")
+    monkeypatch.setattr(Settings, "GRID_WORKER_KEY_PATH", str(tmp_path / "absent-key"))
+    monkeypatch.setattr(
+        Settings, "GRID_WORKER_DELEGATION_PATH", str(tmp_path / "absent-delegation")
+    )
+    core_id, worker, socket = str(uuid4()), WSWorker(), AsyncMock()
+    worker._render_journal = (
+        object()
+    )  # A prior session's handle must not bypass its new owner check.
+    socket.recv.side_effect = [
+        json.dumps({"type": "ready", "worker_id": core_id}),
+        asyncio.CancelledError(),
+    ]
+
+    async def wait_until_cancelled():
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(worker, "_monitor_runtime_health", wait_until_cancelled)
+    monkeypatch.setattr(worker, "_wait_until_paused", wait_until_cancelled)
+    monkeypatch.setattr(
+        ws_module, "grid_ws_url", lambda: "wss://grid.test/v1/workers/ws"
+    )
+    monkeypatch.setattr(ws_module, "grid_ws_ssl", lambda _: None)
+
+    class SocketContext:
+        async def __aenter__(self):
+            return socket
+
+        async def __aexit__(self, *_):
+            return None
+
+    monkeypatch.setattr(
+        ws_module.websockets, "connect", lambda *_, **__: SocketContext()
+    )
+    try:
+        with pytest.raises(asyncio.CancelledError):
+            await worker._session()
+        assert worker._grid_worker_id == core_id
+        assert worker._render_journal is None
+    finally:
+        await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("core_id", [None, "worker-not-a-uuid", str(uuid4()).upper()])
+async def test_durable_video_requires_a_canonical_core_identity(
+    monkeypatch, tmp_path, core_id
+):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", ORIGIN)
+    monkeypatch.setattr(Settings, "GRID_COMFYUI_STATE_DIR", str(tmp_path / "state"))
+    build = AsyncMock(
+        side_effect=AssertionError("must not render an unregistered worker")
+    )
+    monkeypatch.setattr(ws_module, "build_workflow", build)
+    worker, socket = WSWorker(), AsyncMock()
+    worker._grid_worker_id = core_id
+    job = {
+        "id": str(uuid4()),
+        "model": "ltx-test",
+        "job_type": "video",
+        "payload": {
+            "_grid_media_job_version": 1,
+            "n": 1,
+            "seed": 7,
+            "seeds": [7],
+            "recipe_engine": "comfyui",
+            "recipe_spec": copy.deepcopy(GRAPH),
+        },
+        "upload": [
+            {"put_url": "https://storage.example/test", "content_type": "video/mp4"}
+        ],
+    }
+    try:
+        with pytest.raises(RenderUncertain):
+            await worker._handle_job(socket, job)
+        build.assert_not_awaited()
+        socket.send.assert_not_awaited()
+        socket.close.assert_awaited_once()
+        assert worker._render_journal is None
     finally:
         await worker.comfy.aclose()
 
