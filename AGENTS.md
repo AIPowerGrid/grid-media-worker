@@ -87,6 +87,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   supported Python version and audits the complete locked default, test, and
   release dependency set. CI must not fall back to an ad hoc pip install when
   package metadata or the lock is broken.
+  Retain the reviewed multidict 6.9.1 security floor; dependency edits require
+  a frozen-lock install, full tests and a complete locked dependency audit.
 
 ## Local Contracts
 

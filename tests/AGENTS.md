@@ -66,6 +66,8 @@ and the WebSocket worker.
   nodes without modifying the supplied recipe.
   Independent image-output binding rejects missing, linked, ambiguous seed
   layouts and unsupported batch nodes rather than issuing misleading receipts.
+  Timed-image tests cover exact slot/index correspondence, URL deduplication,
+  graph preservation, invalid/unbound slots and streamed source-size limits.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
 
 ## Local Contracts

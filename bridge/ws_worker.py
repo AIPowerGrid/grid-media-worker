@@ -458,6 +458,7 @@ class WSWorker:
             "models": self.models,
             "job_types": self.job_types,
             "bridge_agent": BRIDGE_AGENT,
+            "media_features": ["recipe-image-bindings-v1"],
         }
         if self.profile_metadata is not None:
             payload["worker_profile"] = self.profile_metadata

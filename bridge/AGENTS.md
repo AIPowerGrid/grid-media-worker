@@ -22,6 +22,12 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   only; never invents structure) — the primary dispatch mode. `build_workflow(job)` is the local
   fallback: loads the mapped graph and fills prompt/seed/dimensions/batch/output-prefix, handling
   both graph shapes and the `_bridge` block.
+  `recipe_image_bindings` maps at most sixteen source indices to unique declared
+  `LoadImage.inputs.image` slots. Validate all bindings before fetching and refuse
+  unbound image nodes. Repeated source URLs reuse one upload; downloads are streamed
+  under the 12 MiB per-image limit. Preserve the supplied graph.
+  Bind the actual ComfyUI upload filename, including collision renames; reject
+  returned paths, unexpected subfolders and non-input identities.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
 - **Detection/UI:** `comfyui_detect.py` (find/install ComfyUI for the wizard); `web/` — control
   UI and local capability inventory, owned in its own AGENTS.md. Inventory is descriptive;
@@ -52,6 +58,9 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 ## Local Contracts
 
 - Keep transport payload adaptation in `ws_worker.py`, not `workflow.py`.
+- Registration advertises `recipe-image-bindings-v1` for Core's multi-reference
+  dispatch compatibility check. This does not attest execution or model fidelity.
+  Multiple sources without explicit bindings fail, never fall back to one image.
 - Requested recipe LoRAs must resolve and inject or the job fails before
   rendering. Missing injection maps never silently drop a requested modifier.
   The `done.loras` list reports filenames, not model-fidelity proof. Downloads

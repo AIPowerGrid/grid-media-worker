@@ -9,6 +9,7 @@ from .model_mapper import get_workflow_file
 from .config import Settings
 
 MAX_SOURCE_IMAGE_BYTES = 12 * 1024 * 1024
+MAX_RECIPE_IMAGES = 16
 
 
 def recipe_image_output(workflow: Dict[str, Any], seed: int, index: int) -> Dict[str, Any]:
@@ -90,9 +91,44 @@ async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) ->
     # grid sends the upload URL + the graph path(s) to bind (recipe_image_inputs).
     source_url = payload.get("source_image_url")
     image_paths = payload.get("recipe_image_inputs")
-    if source_url and image_paths:
+    if "recipe_image_bindings" in payload:
+        bindings = payload["recipe_image_bindings"]
+        sources = payload.get("source_image_urls", [source_url])
+        if (not isinstance(bindings, list) or not 1 <= len(bindings) <= MAX_RECIPE_IMAGES
+                or not isinstance(sources, list) or len(sources) != len(bindings)
+                or not all(isinstance(url, str) and 0 < len(url) <= 4096 for url in sources)
+                or sources[0] != source_url):
+            raise RuntimeError("Invalid recipe image binding contract")
+        expected_nodes = {name for name, node in workflow.items()
+                          if isinstance(node, dict) and node.get("class_type") == "LoadImage"}
+        bound_nodes = set()
+        for index, binding in enumerate(bindings):
+            if (not isinstance(binding, dict) or set(binding) != {"image_index", "path"}
+                    or type(binding["image_index"]) is not int or binding["image_index"] != index
+                    or not isinstance(binding["path"], str)):
+                raise RuntimeError("Invalid recipe image binding contract")
+            parts = binding["path"].split(".")
+            if (len(parts) != 3 or parts[1:] != ["inputs", "image"]
+                    or parts[0] not in expected_nodes or parts[0] in bound_nodes
+                    or not isinstance(workflow[parts[0]].get("inputs"), dict)
+                    or "image" not in workflow[parts[0]]["inputs"]):
+                raise RuntimeError("Recipe images may bind only unique declared LoadImage slots")
+            bound_nodes.add(parts[0])
+        if bound_nodes != expected_nodes:
+            raise RuntimeError("Recipe image bindings leave an unbound LoadImage node")
+        # Validate every slot before downloading; shared URLs reuse one local upload.
+        uploaded = {}
+        for index, binding in enumerate(bindings):
+            url = sources[index]
+            if url not in uploaded:
+                filename = f"src_{job_id}_{index}.png"
+                uploaded[url] = await download_image(url, filename)
+            _set_graph_path(workflow, binding["path"], uploaded[url])
+    elif payload.get("source_image_urls") and len(payload["source_image_urls"]) > 1:
+        raise RuntimeError("Multiple recipe images require explicit image bindings")
+    elif source_url and image_paths:
         filename = f"src_{job_id}.png"
-        await download_image(source_url, filename)
+        filename = await download_image(source_url, filename)
         for path in (image_paths if isinstance(image_paths, list) else [image_paths]):
             _set_graph_path(workflow, path, filename)
         print(f"[recipe] bound source image {filename} -> {image_paths}")
@@ -114,19 +150,29 @@ async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) ->
 async def download_image(url: str, filename: str) -> str:
     """Download image from URL and upload it to ComfyUI via API"""
     async with httpx.AsyncClient(timeout=60.0) as client:
-        response = await client.get(url)
-        response.raise_for_status()
-        content = response.content
-        if not content or len(content) > MAX_SOURCE_IMAGE_BYTES:
+        content = bytearray()
+        async with client.stream("GET", url) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes():
+                if len(content) + len(chunk) > MAX_SOURCE_IMAGE_BYTES:
+                    raise RuntimeError("source image is empty or exceeds 12 MB")
+                content.extend(chunk)
+        if not content:
             raise RuntimeError("source image is empty or exceeds 12 MB")
 
         upload_url = f"{Settings.COMFYUI_URL}/upload/image"
-        files = {"image": (filename, content, "image/png")}
+        files = {"image": (filename, bytes(content), "image/png")}
         upload_response = await client.post(upload_url, files=files)
         upload_response.raise_for_status()
+        uploaded = upload_response.json()
+        name = uploaded.get("name") if isinstance(uploaded, dict) else None
+        if (not isinstance(name, str) or not name or name in {".", ".."}
+                or any(char in name for char in ("/", "\\", "\x00"))
+                or uploaded.get("subfolder", "") or uploaded.get("type", "input") != "input"):
+            raise RuntimeError("ComfyUI returned an invalid source image identity")
 
-    print(f"Downloaded and uploaded image: {filename}")
-    return filename
+    print(f"Downloaded and uploaded image: {name}")
+    return name
 
 
 def load_workflow_file(workflow_filename: str) -> Dict[str, Any]:
@@ -245,7 +291,7 @@ async def process_workflow(
             f"grid_input_{job.get('id', 'unknown')}_{uuid.uuid4().hex[:8]}.{image_ext}"
         )
         try:
-            await download_image(job["source_image"], source_image_filename)
+            source_image_filename = await download_image(job["source_image"], source_image_filename)
             print(f"Downloaded source image: {source_image_filename}")
         except Exception as e:
             print(f"Failed to download source image: {e}")
