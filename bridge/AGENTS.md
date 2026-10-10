@@ -73,10 +73,13 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   not supported in this candidate path. Legacy requests are unchanged.
   The ComfyUI submission/polling client ignores ambient HTTP proxies; validate
   its actual base URL, not a changed Settings value, before durable execution.
-  The future Core reconnect delivery must set top-level `resume: true` without
+  Core's candidate reconnect delivery sets top-level `resume: true` without
   changing the immutable payload. Missing local render identity on a resume
   fails uncertain before graph construction; never treat lost state as a new
-  render. This worker guard does not implement Core's authorization handoff.
+  render. Core owns the original-worker/model lease and issues fresh
+  attempt-isolated upload slots. Its private execution token is not a worker
+  credential or wire field. Joint qualification remains required; this worker
+  guard does not itself implement or prove Core's authorization handoff.
 - The candidate journal is namespaced to Core's account-owned worker UUID from
   the authenticated ready frame, worker name, Grid endpoint and ComfyUI endpoint.
   Missing/invalid worker IDs fail closed. Reconnect resets the local journal

@@ -81,8 +81,8 @@ all submission goes through `/v1/*`.
 
 This branch contains an isolated single-video execution journal, not a public
 async-video release. Normal workers do not advertise resume support. Core's
-async admission must remain off until reconnect authorization, retention and
-paid storage/restart canaries pass together.
+async admission must remain off until its candidate original-worker lease,
+this journal, retention and paid storage/restart canaries pass together.
 
 For qualification, set `GRID_COMFYUI_STATE_DIR` to a private, persistent directory
 outside the source checkout, unique to the worker and local ComfyUI instance.
@@ -98,6 +98,11 @@ never submitted again: ComfyUI's requested prompt ID is not an idempotency key.
 Finished MP4 bytes are hash-verified and cached before presigned upload and DONE.
 Native SaveVideo's MP4-in-`images` output is supported. Uncertain delivery closes
 the connection; only Core can decide refunds, completion and worker rewards.
+Core's candidate reconnect sends `resume: true` with the original job/model/
+payload and fresh, attempt-isolated upload slots. A worker without that job's
+local identity refuses instead of creating another render. Core's synthetic
+crash tests and the worker's separate native smoke test are not joint paid
+GPU/R2 qualification.
 
 The cache is bounded to 256 MiB per MP4 and 1 GiB total, with 1024 retained job
 identities. ACK does not prune files or tombstones. At capacity the worker stops
