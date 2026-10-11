@@ -188,10 +188,12 @@ def test_cache_commit_survives_restart_ack_and_unknown_legacy_ack(journal):
     restarted.acknowledge("legacy-image-job")
     restarted.acknowledge(str(uuid4()))
     assert restarted.get(row.job_id).phase == "acknowledged"
-    assert restarted.cached(row.job_id)[0] == VIDEO
-    with pytest.raises(RenderUncertain, match="changed"):
+    assert restarted.get(row.job_id).closed_at is not None
+    assert not (journal.directory / (row.prompt_id + ".mp4")).exists()
+    with pytest.raises(RenderUncertain, match="closed"):
+        restarted.cached(row.job_id)
+    with pytest.raises(RenderUncertain, match="closed"):
         restarted.cache(row.job_id, VIDEO + b"different")
-    assert restarted.cached(row.job_id)[0] == VIDEO
 
 
 def test_crash_after_rename_recovers_only_committed_bytes(journal, monkeypatch):
@@ -604,6 +606,9 @@ async def test_actual_ws_job_recovers_cached_bytes_on_new_worker(
     worker, socket = WSWorker(), AsyncMock()
     core_worker_id = str(uuid4())
     worker._grid_worker_id = core_worker_id
+    monkeypatch.setattr(
+        ws_module, "fetch_states", AsyncMock(return_value={job["id"]: "held"})
+    )
 
     def accepted(request):
         assert worker._render_journal.get(job["id"]).phase == "submitting"

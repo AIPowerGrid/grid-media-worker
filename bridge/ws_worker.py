@@ -61,6 +61,7 @@ from .render_journal import (
     RenderUncertain,
     digest,
 )
+from .render_retention import MAX_STATUS_IDS, fetch_states
 from .workflow import build_workflow, recipe_image_output
 
 logger = logging.getLogger(__name__)
@@ -351,6 +352,7 @@ class WSWorker:
 
             health_task = asyncio.create_task(self._monitor_runtime_health())
             schedule_task = asyncio.create_task(self._wait_until_paused())
+            retention_task = asyncio.create_task(self._reconcile_render_cache())
             try:
                 while True:
                     receive_task = asyncio.create_task(ws.recv())
@@ -389,11 +391,65 @@ class WSWorker:
             finally:
                 health_task.cancel()
                 schedule_task.cancel()
+                retention_task.cancel()
                 await asyncio.gather(
                     health_task,
                     schedule_task,
+                    retention_task,
                     return_exceptions=True,
                 )
+
+    async def _reconcile_render_cache(self) -> None:
+        while True:
+            if Settings.GRID_COMFYUI_STATE_DIR:
+                try:
+                    journal = await self._video_journal()
+                    await asyncio.to_thread(journal.cleanup_closed)
+                    ids = await asyncio.to_thread(journal.unresolved_ids)
+                    for start in range(0, len(ids), MAX_STATUS_IDS):
+                        states = await fetch_states(
+                            Settings.GRID_API_URL, Settings.GRID_API_KEY,
+                            self._grid_worker_id, ids[start:start + MAX_STATUS_IDS],
+                        )
+                        closed = [job_id for job_id, state in states.items() if state == "closed"]
+                        if closed:
+                            await asyncio.to_thread(journal.confirm_closed, closed)
+                except Exception as exc:  # noqa: BLE001 - preserve pending content on every uncertainty
+                    logger.warning("Render cache reconciliation deferred error_type=%s", type(exc).__name__)
+            await asyncio.sleep(60)
+
+    async def _video_journal(self) -> RenderJournal:
+        if not Settings.GRID_COMFYUI_STATE_DIR:
+            raise RenderFailed("Durable video state is not configured")
+        origin = urlsplit(str(self.comfy.base_url))
+        if (
+            origin.hostname not in {"127.0.0.1", "localhost", "::1"}
+            or origin.scheme not in {"http", "https"}
+            or origin.username or origin.password or origin.path not in {"", "/"}
+            or origin.query or origin.fragment
+        ):
+            raise RenderFailed("Durable ComfyUI must be a private loopback runtime")
+        worker_id = self._grid_worker_id
+        if not isinstance(worker_id, str):
+            raise RenderUncertain("Durable video requires Core's registered worker identity")
+        try:
+            if str(UUID(worker_id)) != worker_id:
+                raise ValueError("Noncanonical UUID")
+        except ValueError as exc:
+            raise RenderUncertain("Invalid registered Core worker identity") from exc
+        namespace = digest({
+            "comfy": str(self.comfy.base_url), "grid": grid_ws_url(),
+            "worker": Settings.GRID_WORKER_NAME, "worker_id": worker_id,
+        })
+        journal = self._render_journal
+        if journal is None:
+            journal = await asyncio.to_thread(
+                RenderJournal, Settings.GRID_COMFYUI_STATE_DIR, namespace=namespace,
+            )
+            self._render_journal = journal
+        elif journal.namespace != namespace:
+            raise RenderUncertain("Retained render state belongs to another runtime/worker")
+        return journal
 
     def _accepting_jobs(self) -> bool:
         try:
@@ -557,39 +613,7 @@ class WSWorker:
             or payload.get("loras")
         ):
             raise RenderFailed("Unsupported durable video contract")
-        if not Settings.GRID_COMFYUI_STATE_DIR:
-            raise RenderFailed("Durable video state is not configured")
-        origin = urlsplit(str(self.comfy.base_url))
-        if (
-            origin.hostname not in {"127.0.0.1", "localhost", "::1"}
-            or origin.scheme not in {"http", "https"}
-            or origin.username
-            or origin.password
-            or origin.path not in {"", "/"}
-            or origin.query
-            or origin.fragment
-        ):
-            raise RenderFailed("Durable ComfyUI must be a private loopback runtime")
-        worker_id = self._grid_worker_id
-        if not isinstance(worker_id, str):
-            raise RenderUncertain("Durable video requires Core's registered worker identity")
-        try:
-            if str(UUID(worker_id)) != worker_id:
-                raise ValueError("Noncanonical UUID")
-        except ValueError as exc:
-            raise RenderUncertain("Invalid registered Core worker identity") from exc
-        namespace = digest({
-            "comfy": str(self.comfy.base_url), "grid": grid_ws_url(),
-            "worker": Settings.GRID_WORKER_NAME, "worker_id": worker_id,
-        })
-        journal = self._render_journal
-        if journal is None:
-            journal = await asyncio.to_thread(
-                RenderJournal, Settings.GRID_COMFYUI_STATE_DIR, namespace=namespace,
-            )
-            self._render_journal = journal
-        elif journal.namespace != namespace:
-            raise RenderUncertain("Retained render state belongs to another runtime/worker")
+        journal = await self._video_journal()
         binding = digest({"job_type": "video", "model": msg["model"], "payload": payload})
 
         async def build() -> dict[str, Any]:
@@ -608,6 +632,14 @@ class WSWorker:
             raise RenderUncertain("Invalid Core recovery authorization")
         if resume and await asyncio.to_thread(journal.get, msg["id"]) is None:
             raise RenderUncertain("Recovery requires the original retained render identity")
+        states = await fetch_states(
+            Settings.GRID_API_URL, Settings.GRID_API_KEY, self._grid_worker_id, [msg["id"]],
+        )
+        if states[msg["id"]] == "closed":
+            await asyncio.to_thread(journal.confirm_closed, [msg["id"]])
+            raise RenderUncertain("Core has closed this render")
+        if states[msg["id"]] != "held":
+            raise RenderUncertain("Core has not confirmed the original held execution")
         retained = await asyncio.to_thread(journal.begin, msg["id"], binding)
         progress = asyncio.create_task(self._relay_progress(ws, msg["id"], retained.prompt_id))
         try:

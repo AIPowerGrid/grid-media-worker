@@ -21,6 +21,8 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   POST. ComfyUI accepts that ID but does not deduplicate submissions. Unknown
   acceptance can only observe the saved ID; never POST again or interrupt
   a shared runtime. Recover cached bytes before upload/DONE retries.
+  `render_retention.py` owns the bounded rig-bound Core terminal-state client;
+  it is not financial authority or local-time expiry.
 - **Mapping:** `model_mapper.py` — grid model name → workflow filename (`DEFAULT_WORKFLOW_MAP`
   + img2img map), and checkpoint-file → grid-name resolution via the local model reference.
 - **Templating:** `workflow.py` — two paths. `build_recipe_workflow(job, payload)` executes a
@@ -104,9 +106,27 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   normalized commitment from returned history.
 - Cache expected byte hash/size before atomic rename and fsync. Enforce
   256 KiB commitments, 4 MiB observations, 256 MiB per MP4, 1 GiB aggregate
-  cache and 1024 tombstones. ACK retains identity/bytes; there is no automatic
-  pruning yet. At capacity, stop/reconcile rather than forgetting a render.
-  Retention and Core-bound continuation are required before advertisement.
+  cache and 1024 total identities. A cached-job ACK or Core-confirmed `closed`
+  commits nullable `closed_at` before deleting only that prompt's private MP4/
+  partial cache. Repeat cleanup after a crash; clear its accounted size only
+  after unlink and directory fsync. Retain at most 128 confirmed closed rows.
+  Unknown/held rows are never pruned. Old ACK rows with NULL closure metadata
+  require fresh Core confirmation. Closed content cannot be cached or served.
+  At unresolved capacity, stop/reconcile rather than forgetting a render.
+- Before every marked video creates local identity, builds a graph or submits
+  Comfy work, require a matching current `held` from Core's private
+  `/v1/workers/self/media-jobs`. This prevents rerendering old closed IDs even
+  after bounded local history is pruned. Reconcile lost ACKs every 60 seconds,
+  at most 32 IDs per call; check all retained IDs, not only the first batch.
+  Use a dedicated rig-bound worker credential and the configured HTTPS
+  `GRID_API_URL` origin (plain HTTP only on loopback), never the WS-only host.
+  Do not follow redirects or ambient proxies; bound the whole request to ten
+  seconds and response to 4096 bytes. Validate schema, ready-frame worker UUID
+  and exact requested ID set. Unknown/expired/missing/foreign jobs or unavailable
+  Core preserve local state and cannot authorize work or deletion.
+  This cleans the worker journal cache only, not ComfyUI input/output files or
+  Core's R2 objects. Joint retention/recovery canaries remain required before
+  advertisement. Legacy and normal managed-audio jobs are unchanged.
 - A definite backend rejection/execution or invalid completed-output failure
   may send a generic error. Unknown transport, cache or delivery failures close
   the WebSocket without a terminal failure/refund request. Core owns financial

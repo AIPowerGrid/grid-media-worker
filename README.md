@@ -110,9 +110,24 @@ cached/uploaded bytes. The paid result is that frozen copy, not the worker's
 still-valid PUT slot. Storage uncertainty leaves the hold recoverable without
 ACK; byte integrity is not model-fidelity or video-quality certification.
 
-The cache is bounded to 256 MiB per MP4 and 1 GiB total, with 1024 retained job
-identities. ACK does not prune files or tombstones. At capacity the worker stops
-this path for operator review; an automatic retention policy is still required.
+The cache is bounded to 256 MiB per MP4 and 1 GiB total, with 1024 total job
+identities. A cached-job ACK or Core-confirmed terminal state commits local
+closure before deleting its private MP4/partial cache. Cleanup repeats safely
+after restart. Keep at most 128 confirmed-closed identities; unresolved jobs
+are never automatically pruned. At unresolved capacity the worker stops this
+path for operator review.
+
+This path requires a dedicated, rig-bound worker credential and the configured
+HTTPS `GRID_API_URL` origin (HTTP only on loopback), not a WS-only hostname.
+Before any marked job creates state or submits Comfy work, Core must confirm
+the same registered worker and current held job through
+`POST /v1/workers/self/media-jobs`. Every 60 seconds the worker reconciles local
+jobs to recover lost ACKs. Checks are bounded; credentials never follow a
+redirect or ambient proxy. Unknown/expired/unavailable state is not closure
+and cannot authorize either deletion or another render. Mandatory preflight
+also rejects a closed ID after its bounded local history has been pruned.
+Old ACK rows require fresh confirmation. This does not delete ComfyUI's own
+inputs/outputs or Core's R2 objects; joint retention qualification remains open.
 Raw prompts, graphs, credentials and upload URLs are not stored in the journal;
 cached videos remain private user content. Batch/LoRA and shared remote runtimes
 are not supported by this candidate path.

@@ -32,6 +32,7 @@ MAX_OBSERVATION_BYTES = 4 * 1024 * 1024
 MAX_VIDEO_BYTES = 256 * 1024 * 1024
 MAX_CACHE_BYTES = 1024 * 1024 * 1024
 MAX_JOBS = 1024
+MAX_CLOSED_JOBS = 128
 MARKER = "aipg_render_v1"
 
 
@@ -130,6 +131,7 @@ class RenderRecord:
     normalized_graph_hash: str | None
     sha256: str | None
     size: int | None
+    closed_at: float | None
 
 
 class RenderJournal:
@@ -161,6 +163,8 @@ class RenderJournal:
             columns = {row[1] for row in db.execute("PRAGMA table_info(renders)")}
             if "normalized_graph_hash" not in columns:
                 db.execute("ALTER TABLE renders ADD COLUMN normalized_graph_hash TEXT")
+            if "closed_at" not in columns:
+                db.execute("ALTER TABLE renders ADD COLUMN closed_at REAL")
             db.execute("INSERT OR IGNORE INTO owner VALUES (1, ?)", (namespace,))
             if (
                 db.execute("SELECT namespace FROM owner WHERE id=1").fetchone()[0]
@@ -173,6 +177,7 @@ class RenderJournal:
 
     @contextmanager
     def _db(self) -> Iterator[sqlite3.Connection]:
+        _private(self.directory, directory=True)
         _private(self.path)
         db = sqlite3.connect(self.path, timeout=5)
         db.row_factory = sqlite3.Row
@@ -205,6 +210,7 @@ class RenderJournal:
     def begin(self, job_id: str, binding: str) -> RenderRecord:
         job_id = _uuid(job_id)
         binding = _hash(binding)
+        self.cleanup_closed()
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             row = db.execute(
@@ -263,8 +269,61 @@ class RenderJournal:
             return
         with self._db() as db:
             db.execute(
-                "UPDATE renders SET phase='acknowledged' WHERE job_id=? AND phase='cached'",
-                (job_id,),
+                "UPDATE renders SET phase='acknowledged', closed_at=COALESCE(closed_at, ?) "
+                "WHERE job_id=? AND phase='cached'",
+                (time.time(), job_id),
+            )
+        self.cleanup_closed()
+
+    def unresolved_ids(self) -> list[str]:
+        with self._db() as db:
+            return [
+                row[0]
+                for row in db.execute(
+                    "SELECT job_id FROM renders WHERE closed_at IS NULL ORDER BY created, job_id LIMIT ?",
+                    (MAX_JOBS,),
+                )
+            ]
+
+    def confirm_closed(self, job_ids: list[str]) -> None:
+        """Called only for Core-confirmed closed jobs, never for local expiry."""
+        ids = [_uuid(job_id) for job_id in job_ids]
+        if len(ids) > MAX_JOBS or len(set(ids)) != len(ids):
+            raise RenderUncertain("Invalid closed render batch")
+        with self._db() as db:
+            db.executemany(
+                "UPDATE renders SET phase='acknowledged', closed_at=COALESCE(closed_at, ?) WHERE job_id=?",
+                [(time.time(), job_id) for job_id in ids],
+            )
+        # Closure commits first. A crash before/during unlink retains a durable
+        # closed row; the next cleanup repeats safely without another render.
+        self.cleanup_closed()
+
+    def cleanup_closed(self) -> None:
+        with self._db() as db:
+            db.execute("BEGIN IMMEDIATE")
+            rows = db.execute(
+                "SELECT * FROM renders WHERE phase='acknowledged' AND closed_at IS NOT NULL "
+                "ORDER BY closed_at DESC, job_id DESC"
+            ).fetchall()
+            for item in rows:
+                path = self._asset(self._record(item))
+                for asset in (path, path.with_suffix(".part")):
+                    try:
+                        _private(asset)
+                    except FileNotFoundError:
+                        continue
+                    asset.unlink()
+            if rows:
+                _sync_directory(self.directory)
+                db.execute(
+                    "UPDATE renders SET size=NULL WHERE phase='acknowledged' AND closed_at IS NOT NULL"
+                )
+            # Only closed identities can be forgotten. Mandatory Core preflight
+            # still rejects an old closed job even after this bounded history.
+            db.executemany(
+                "DELETE FROM renders WHERE job_id=? AND closed_at IS NOT NULL",
+                [(row["job_id"],) for row in rows[MAX_CLOSED_JOBS:]],
             )
 
     def _asset(self, row: RenderRecord) -> Path:
@@ -272,6 +331,8 @@ class RenderJournal:
 
     def cached(self, job_id: str) -> tuple[bytes, str] | None:
         row = self.get(job_id)
+        if row is not None and row.closed_at is not None:
+            raise RenderUncertain("Core has closed this render")
         if row is None or row.phase not in {"caching", "cached", "acknowledged"}:
             return None
         path = self._asset(row)
@@ -318,6 +379,8 @@ class RenderJournal:
             )
             if row.phase not in {"running", "caching", "cached", "acknowledged"}:
                 raise RenderUncertain("Render cache has no accepted prompt")
+            if row.closed_at is not None:
+                raise RenderUncertain("Core has closed this render")
             if row.sha256 is not None and (
                 row.sha256 != sha or row.size != len(content)
             ):
@@ -341,6 +404,8 @@ class RenderJournal:
             row = self._record(
                 db.execute("SELECT * FROM renders WHERE job_id=?", (job_id,)).fetchone()
             )
+            if row.closed_at is not None:
+                raise RenderUncertain("Core has closed this render")
             if row.phase in {"cached", "acknowledged"}:
                 self.cached(job_id)
                 return

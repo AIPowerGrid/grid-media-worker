@@ -29,6 +29,12 @@ and the WebSocket worker.
   and WS cases prove lost-reply/restart recovery and re-upload after PUT/DONE
   failure without a second render. These do not prove Core reconnect routing,
   R2 settlement, Windows ACLs or GPU fidelity. The feature stays unadvertised.
+- `test_render_retention.py` - strict Core-origin/schema/worker/ID binding,
+  response bounds, no redirect/proxy credentials, refused preflight, bounded
+  closed history, legacy closure migration, pending-file preservation and
+  periodic lost-ACK recovery. A real child process exits after SQLite closure
+  commits but before unlink; cleanup resumes safely. HTTP/Core/GPU remain
+  fixtures, not joint paid qualification.
 - `test_model_mapper.py` - model-reference resolution, capability inventory,
   and retired-capability advertisement guards.
 - `test_worker_identity.py` - worker-key custody, payout-wallet delegation,
