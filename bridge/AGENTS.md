@@ -43,9 +43,17 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   loopback ComfyUI upload and bind its actual collision-renamed input filename.
   Bound each transfer to 60 seconds and 12/32 MiB audio/video respectively.
   Malformed/missing/unbound sources fail; never silently downgrade to T2V/I2V.
-  This candidate does not advertise `recipe-media-sources-v1` yet. Joint native
-  recovery/source-retention/billing tests are required before advertisement.
+  Default workers do not advertise `recipe-media-sources-v1`. Candidate opt-in
+  startup must validate all governed source inventories before declaring it;
+  protocol inventory is not model/quality or public release qualification.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
+- **Video startup:** `video_startup.py` - default-off governed video compatibility
+  check. Require one explicit LTX BF16 model and video-only jobs, private POSIX
+  state and the actual loopback ComfyUI origin. Read authenticated Core recipes
+  and credential-free ComfyUI inventory under size/time limits without redirects
+  or ambient proxies. Check every returned contract, node and referenced file.
+  Core's shared source feature requires the full governed source-mode set;
+  partial support must not advertise it. Never submit an unpaid smoke render.
 - **Detection/UI:** `comfyui_detect.py` (find/install ComfyUI for the wizard); `web/` — control
   UI and local capability inventory, owned in its own AGENTS.md. Inventory is descriptive;
   runtime gates remain authoritative for qualification and advertisement.
@@ -78,7 +86,15 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 - Registration advertises `recipe-image-bindings-v1` for Core's multi-reference
   dispatch compatibility check. This does not attest execution or model fidelity.
   Multiple sources without explicit bindings fail, never fall back to one image.
-- No worker release yet advertises `async-video-resume-v1`. A marked video
+- Released/default workers do not advertise `async-video-resume-v1`.
+  `GRID_ASYNC_VIDEO=true` opts into candidate normal-startup checks; setting the
+  directory alone or calling registration without successful checks declares
+  nothing. `GRID_VIDEO_SOURCE_MODES=audio,video` additionally requests the
+  shared source feature for the distilled contract. Managed profiles and
+  blind-trust mode cannot bypass these checks. Recheck the journal namespace
+  against Core's authenticated ready-frame worker before processing jobs.
+  Inventory does not prove GPU execution/fidelity, paid correctness or public
+  admission. A marked video
   requires `GRID_COMFYUI_STATE_DIR`, a loopback runtime, one MP4 upload slot,
   one Core-assigned seed and a governed ComfyUI recipe; LoRAs and batches are
   not supported in this candidate path. Legacy requests are unchanged.
@@ -135,7 +151,7 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   Core preserve local state and cannot authorize work or deletion.
   This cleans the worker journal cache only, not ComfyUI input/output files or
   Core's R2 objects. Joint retention/recovery canaries remain required before
-  advertisement. Legacy and normal managed-audio jobs are unchanged.
+  public promotion. Legacy and normal managed-audio jobs are unchanged.
 - A definite backend rejection/execution or invalid completed-output failure
   may send a generic error. Unknown transport, cache or delivery failures close
   the WebSocket without a terminal failure/refund request. Core owns financial

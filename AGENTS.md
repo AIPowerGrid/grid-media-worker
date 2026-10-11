@@ -106,7 +106,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   binds Core-issued exact-role, byte/hash/timing commitments into governed
   `LoadAudio`/`LoadVideo` slots. Downloads use HTTPS R2 without Grid credentials
   or redirects, then upload to loopback ComfyUI with collision-safe names.
-  No public `recipe-media-sources-v1` advertisement is enabled. Native joint
+  Default/released workers do not advertise `recipe-media-sources-v1`. The
+  explicit candidate startup described below can declare it only after every
+  governed source mode's node/file inventory checks. Native joint
   transport, source privacy/retention and paid lifecycle evidence remain gates.
 - **Advertise only what you can serve:** a model is advertised only when its workflow file is
   resolvable and every referenced weight is present in ComfyUI. With `WORKFLOW_FILE` set,
@@ -117,8 +119,12 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   Grid-issued presigned URLs from the job message.
 - **Durable async video remains a candidate:** `bridge/render_journal.py`
   persists a single governed video's ComfyUI identity and bounded MP4 cache
-  before upload. Enable its private directory only for isolated qualification;
-  registration does not advertise `async-video-resume-v1`. Core's separate
+  before upload. `GRID_ASYNC_VIDEO` defaults off; a private directory alone
+  cannot advertise `async-video-resume-v1`. Opt-in POSIX startup requires one
+  explicit governed LTX model, video-only jobs, a healthy loopback runtime and
+  authenticated Core inventory. Signed-profile/blind-trust overrides reject.
+  `GRID_VIDEO_SOURCE_MODES` defaults empty; Core's shared source feature requires
+  all governed modes, not an audio-only or video-only subset. Core's separate
   candidate implements original-worker leased reconnect authorization; joint
   native-worker/GPU/storage recovery, retention and paid canaries must pass
   before public async admission. Local state cannot authorize a charge or payout.

@@ -7,6 +7,12 @@ and the WebSocket worker.
 
 ## Ownership
 
+- `test_video_startup.py` - normal-run capability gating, exact Core model/root/
+  contract, complete shared source modes, missing nodes/files, private POSIX
+  state, loopback/TLS origin rules and bounded read-only HTTP. Worker keys must
+  reach Core only; no redirects, ambient proxies or unpaid render. Flags/private
+  state alone, signed-profile overrides and blind trust cannot declare support.
+  Mocked inventories do not establish model fidelity or public qualification.
 - `test_operator_rough_edges.py` - cold-start inventory/discovery, portable
   port-conflict diagnostics, install-relative defaults, advertised status, and
   advisory price-book aliases/fetch failures.
@@ -30,7 +36,8 @@ and the WebSocket worker.
   fail-closed checks for missing, unknown, temporary and extra real outputs.
   Mocked HTTP and WS cases prove lost-reply/restart recovery and re-upload after PUT/DONE
   failure without a second render. These do not prove Core reconnect routing,
-  R2 settlement, Windows ACLs or GPU fidelity. The feature stays unadvertised.
+  R2 settlement, Windows ACLs or GPU fidelity. Default advertisement stays off;
+  the separate opt-in startup test covers compatibility only.
 - `test_render_retention.py` - strict Core-origin/schema/worker/ID binding,
   response bounds, no redirect/proxy credentials, refused preflight, bounded
   closed history, legacy closure migration, pending-file preservation and

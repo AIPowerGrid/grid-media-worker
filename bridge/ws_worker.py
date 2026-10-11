@@ -232,8 +232,10 @@ class WSWorker:
         self._capacity_error: str | None = None
         self._render_journal: RenderJournal | None = None
         self._grid_worker_id: str | None = None
+        self._video_features: tuple[str, ...] = ()
 
     async def run(self):
+        self._video_features = ()
         if websockets is None:
             raise RuntimeError("websockets package required for the Grid worker")
         try:
@@ -241,6 +243,11 @@ class WSWorker:
             Settings.GRID_SCHEDULE = validate_schedule(Settings.GRID_SCHEDULE)
         except ValueError as exc:
             raise RuntimeError(str(exc)) from exc
+        async_video = Settings.GRID_ASYNC_VIDEO
+        if Settings.GRID_VIDEO_SOURCE_MODES and not async_video:
+            raise RuntimeError("Video source advertisement requires GRID_ASYNC_VIDEO")
+        if async_video and (Settings.GRID_PROFILE_PATH or Settings.GRID_TRUST_MODELS):
+            raise RuntimeError("Async video cannot bypass checks through a managed profile or blind trust")
         # Advertise-only-what-you-can-serve gate. Applies to an explicit
         # GRID_MODEL override too — a worker must never advertise a model whose
         # workflow is missing or whose weights aren't loaded in ComfyUI (that's
@@ -270,7 +277,7 @@ class WSWorker:
                 self.profile["runtime"]["model"],
                 api_key=Settings.ACE_STEP_API_KEY,
             )
-        else:
+        elif not async_video:
             await initialize_model_mapper(Settings.COMFYUI_URL)
             # ComfyUI answers HTTP before its model scan finishes, so a first
             # pass can see zero files and the whole startup used to abort with
@@ -286,15 +293,27 @@ class WSWorker:
             await self._check_runtime_health()
         # Automatic discovery needs the freshly initialized inventory, including
         # files that appeared during the cold-start wait.
-        if not Settings.GRID_PROFILE_PATH and not Settings.GRID_MODELS:
+        if not async_video and not Settings.GRID_PROFILE_PATH and not Settings.GRID_MODELS:
             candidates = get_grid_models()
         retired = [model for model in candidates if is_retired_model(model)]
         if retired:
             logger.warning("Refusing retired model claim(s): %s", retired)
             candidates = [model for model in candidates if not is_retired_model(model)]
         self.models = []
+        if async_video:
+            from .video_startup import qualify_video_startup
+
+            await self._check_runtime_health()
+            self._video_features = await qualify_video_startup(
+                models=candidates, job_types=self.job_types,
+                source_modes=Settings.GRID_VIDEO_SOURCE_MODES,
+                grid_api_url=Settings.GRID_API_URL, api_key=Settings.GRID_API_KEY,
+                comfy_url=str(self.comfy.base_url), state_dir=Settings.GRID_COMFYUI_STATE_DIR,
+            )
         for m in candidates:
-            if direct_audio:
+            if async_video:
+                ok, reason = True, "governed async-video protocol inventory checked; not fidelity"
+            elif direct_audio:
                 ok, reason = True, "signed profile canary + local ACE-Step readiness"
             elif Settings.GRID_PREFLIGHT:
                 from .preflight import preflight_model
@@ -348,6 +367,8 @@ class WSWorker:
                 raise RuntimeError(f"Registration rejected: {ready}")
             self._grid_worker_id = ready.get("worker_id")
             self._render_journal = None
+            if self._video_features:
+                await self._video_journal()
             logger.info(f"Registered as worker {ready.get('worker_id')}")
 
             health_task = asyncio.create_task(self._monitor_runtime_health())
@@ -530,7 +551,7 @@ class WSWorker:
             "models": self.models,
             "job_types": self.job_types,
             "bridge_agent": BRIDGE_AGENT,
-            "media_features": ["recipe-image-bindings-v1"],
+            "media_features": ["recipe-image-bindings-v1", *self._video_features],
         }
         if self.profile_metadata is not None:
             payload["worker_profile"] = self.profile_metadata

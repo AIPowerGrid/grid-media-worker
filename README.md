@@ -80,7 +80,7 @@ all submission goes through `/v1/*`.
 ## Candidate async video recovery
 
 This branch contains an isolated single-video execution journal, not a public
-async-video release. Normal workers do not advertise resume support. Core's
+async-video release. Released/default workers do not advertise resume support. Core's
 async admission must remain off until its candidate original-worker lease,
 this journal, retention and paid storage/restart canaries pass together.
 
@@ -91,6 +91,24 @@ and MP4 cache use `0600` files. Do not remove it to retry a job. Changing the
 Core worker identity, worker name or endpoint requires reconciliation of retained
 work. API-key rotation for the same registered worker preserves its cache.
 Windows ACL and crash behavior are not yet qualified.
+
+The candidate normal startup has an explicit operator pilot: select one exact
+`GRID_MODEL` (`LTX-2.5 Distilled BF16` or `LTX-2.5 Dev BF16`),
+`GRID_JOB_TYPES=video`, the private state directory and `GRID_ASYNC_VIDEO=true`.
+It checks the actual loopback ComfyUI runtime and authenticated Core recipe
+contracts/node/file inventories before declaring `async-video-resume-v1`.
+No startup render is submitted. Neither blind trust nor a managed-profile
+override can bypass this gate. Core must supply the new inventory fields;
+an older Core fails closed instead of advertising unsupported video.
+
+For distilled audio/video conditioning, `GRID_VIDEO_SOURCE_MODES=audio,video`
+checks every source node/weight before adding `recipe-media-sources-v1`.
+The current Core feature covers both modes, so a partial list rejects rather
+than falsely declaring support. Leave it empty for source-free jobs; dev has
+no governed source modes yet. Flags or a directory alone do not advertise
+anything. Inventory is protocol compatibility, not GPU model/fidelity, quality,
+public onboarding or paid-release approval. Core still owns admission and
+held-job authorization. Each GPU needs its own worker identity and directory.
 
 Marked, Core-governed videos save a ComfyUI prompt ID before submission, then
 observe that same ID after a lost reply or restart. An uncertain acceptance is

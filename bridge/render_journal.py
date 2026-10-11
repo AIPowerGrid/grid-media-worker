@@ -120,6 +120,17 @@ def _sync_directory(path: Path) -> None:
         os.close(fd)
 
 
+def prepare_state_directory(directory: str | Path) -> Path:
+    """Check the private directory without adopting a worker namespace early."""
+    path = Path(directory).expanduser().absolute()
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    _private(path, directory=True)
+    database = path / "renders.sqlite3"
+    if database.exists() or database.is_symlink():
+        _private(database)
+    return path
+
+
 @dataclass(frozen=True)
 class RenderRecord:
     job_id: str
@@ -140,9 +151,7 @@ class RenderJournal:
     def __init__(self, directory: str | Path, *, namespace: str) -> None:
         namespace = _hash(namespace)
         self.namespace = namespace
-        self.directory = Path(directory).expanduser().absolute()
-        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        _private(self.directory, directory=True)
+        self.directory = prepare_state_directory(directory)
         self.path = self.directory / "renders.sqlite3"
         try:
             fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
