@@ -7,7 +7,7 @@ import asyncio
 import copy
 import os
 from types import SimpleNamespace
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 from unittest.mock import AsyncMock
 
 import httpx
@@ -113,6 +113,17 @@ def options(tmp_path, **overrides):
     }
 
 
+def inventory_response(request, info):
+    name = unquote(request.url.path.rsplit("/", 1)[-1])
+    return httpx.Response(200, json={name: info[name]} if name in info else {})
+
+
+def mock_inventory(routes, info):
+    return routes.get(url__regex=COMFY + r"/object_info/[^/]+$").mock(
+        side_effect=lambda request: inventory_response(request, info)
+    )
+
+
 @pytest.mark.asyncio
 @POSIX_ONLY
 @pytest.mark.parametrize(
@@ -141,18 +152,20 @@ async def test_read_only_startup_checks_exact_model_and_separates_credentials(
     monkeypatch.setattr(startup.httpx, "AsyncClient", client)
     with respx.mock() as routes:
         recipe = routes.get(RECIPE_URL).respond(200, json=records)
-        local = routes.get(COMFY + "/object_info").respond(200, json=info)
+        local = mock_inventory(routes, info)
         assert (
             await startup.qualify_video_startup(
                 **options(tmp_path, source_modes=modes),
             )
             == expected
         )
-        assert len(routes.calls) == 2
+        expected_nodes = set(info) if modes else {"ModelLoader", "AudioDecoder"}
+        assert len(routes.calls) == 1 + len(expected_nodes)
+        assert {call.request.url.path.rsplit("/", 1)[-1] for call in local.calls} == expected_nodes
         assert all(call.request.method == "GET" for call in routes.calls)
         assert recipe.calls[0].request.headers["apikey"] == "synthetic-worker-key"
-        assert "apikey" not in local.calls[0].request.headers
-        assert "authorization" not in local.calls[0].request.headers
+        assert all("apikey" not in call.request.headers for call in local.calls)
+        assert all("authorization" not in call.request.headers for call in local.calls)
     assert client_options[0]["follow_redirects"] is False
     assert client_options[0]["trust_env"] is False
     assert inventories == original
@@ -228,9 +241,9 @@ async def test_missing_source_requirements_do_not_advertise(
             info["UnrelatedLoader"] = {
                 "input": {"required": {"file": [["union.safetensors"]]}}
             }
-    with respx.mock() as routes:
+    with respx.mock(assert_all_called=False) as routes:
         routes.get(RECIPE_URL).respond(200, json=records)
-        routes.get(COMFY + "/object_info").respond(200, json=info)
+        mock_inventory(routes, info)
         with pytest.raises(startup.VideoStartupError):
             await startup.qualify_video_startup(**options(tmp_path))
 
@@ -243,10 +256,66 @@ async def test_source_free_worker_does_not_need_union_inventory(tmp_path, invent
     del info["AudioEncoder"]
     with respx.mock() as routes:
         routes.get(RECIPE_URL).respond(200, json=records)
-        routes.get(COMFY + "/object_info").respond(200, json=info)
+        local = mock_inventory(routes, info)
         assert await startup.qualify_video_startup(
             **options(tmp_path, source_modes=[]),
         ) == ("async-video-resume-v1",)
+        assert len(local.calls) == 2
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
+@pytest.mark.parametrize("name", ["..", "bad/path", "bad\\path", "bad?query", "bad#fragment", "bad\nname"])
+async def test_unsafe_node_names_cannot_trigger_inventory_reads(tmp_path, inventories, name):
+    records, info = inventories
+    records["recipes"][0]["node_types"].append(name)
+    with respx.mock(assert_all_called=False) as routes:
+        routes.get(RECIPE_URL).respond(200, json=records)
+        local = mock_inventory(routes, info)
+        with pytest.raises(startup.VideoStartupError, match="node names"):
+            await startup.qualify_video_startup(**options(tmp_path))
+        assert not local.called
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
+async def test_distinct_node_limit_before_inventory_reads(tmp_path, inventories):
+    records, info = inventories
+    records["recipes"][0]["node_types"] = [f"Node{index}" for index in range(128)]
+    with respx.mock(assert_all_called=False) as routes:
+        routes.get(RECIPE_URL).respond(200, json=records)
+        local = mock_inventory(routes, info)
+        with pytest.raises(startup.VideoStartupError, match="node names"):
+            await startup.qualify_video_startup(**options(tmp_path))
+        assert not local.called
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
+@pytest.mark.parametrize("value", [{}, {"UnrelatedNode": {}}, [], {"AudioDecoder": []}])
+async def test_exact_node_response_required_without_full_scan_fallback(tmp_path, inventories, value):
+    records, _ = inventories
+    with respx.mock() as routes:
+        recipe = routes.get(RECIPE_URL).respond(200, json=records)
+        local = routes.get(COMFY + "/object_info/AudioDecoder").respond(200, json=value)
+        with pytest.raises(startup.VideoStartupError):
+            await startup.qualify_video_startup(**options(tmp_path))
+        assert recipe.call_count == 1 and local.call_count == 1
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
+async def test_inventory_byte_limit_is_aggregate_not_per_node(tmp_path, inventories, monkeypatch):
+    records, info = inventories
+    total = sum(len(httpx.Response(200, json={name: definition}).content)
+                for name, definition in info.items())
+    monkeypatch.setattr(startup, "MAX_INVENTORY_BYTES", total - 1)
+    with respx.mock() as routes:
+        recipe = routes.get(RECIPE_URL).respond(200, json=records)
+        local = mock_inventory(routes, info)
+        with pytest.raises(startup.VideoStartupError, match="limit"):
+            await startup.qualify_video_startup(**options(tmp_path))
+        assert recipe.call_count == 1 and local.call_count == len(info)
 
 
 @pytest.mark.asyncio
@@ -269,11 +338,12 @@ async def test_governed_identity_and_complete_source_feature(
         records["recipes"].append(copy.deepcopy(records["recipes"][0]))
     else:
         args["source_modes"] = ["audio"]
-    with respx.mock() as routes:
+    with respx.mock(assert_all_called=False) as routes:
         routes.get(RECIPE_URL).respond(200, json=records)
-        routes.get(COMFY + "/object_info").respond(200, json=info)
+        local = mock_inventory(routes, info)
         with pytest.raises(startup.VideoStartupError):
             await startup.qualify_video_startup(**args)
+        assert not local.called
 
 
 @pytest.mark.asyncio
@@ -307,7 +377,7 @@ async def test_bounded_inventory_failures(tmp_path, inventories, monkeypatch, fa
             recipe.respond(200, content=b"{")
         else:
             recipe.respond(200, json=records)
-        local = routes.get(COMFY + "/object_info").respond(200, json=info)
+        local = mock_inventory(routes, info)
         with pytest.raises(startup.VideoStartupError):
             await startup.qualify_video_startup(**options(tmp_path))
         assert len(routes.calls) <= (startup.STARTUP_MAX_ATTEMPTS if failure == "deadline" else 1)
@@ -325,7 +395,7 @@ async def test_transient_inventory_read_retries_entire_check_without_credentials
     records, info = inventories
     monkeypatch.setattr(startup, "STARTUP_RETRY_SECONDS", 0)
     if failure == "deadline":
-        monkeypatch.setattr(startup, "STARTUP_DEADLINE_SECONDS", 0.01)
+        monkeypatch.setattr(startup, "STARTUP_DEADLINE_SECONDS", 0.1)
     attempts = 0
 
     async def inventory(request):
@@ -335,20 +405,20 @@ async def test_transient_inventory_read_retries_entire_check_without_credentials
         assert "authorization" not in request.headers
         if attempts == 1:
             if failure == "deadline":
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.2)
             elif failure == "network":
                 raise httpx.ConnectError("synthetic transport loss", request=request)
             else:
                 raise httpx.ReadTimeout("synthetic timeout", request=request)
-        return httpx.Response(200, json=info)
+        return inventory_response(request, info)
 
     with respx.mock() as routes:
         recipe = routes.get(RECIPE_URL).respond(200, json=records)
-        routes.get(COMFY + "/object_info").mock(side_effect=inventory)
+        mock_inventory(routes, info).mock(side_effect=inventory)
         assert await startup.qualify_video_startup(**options(tmp_path)) == (
             "async-video-resume-v1", "recipe-media-sources-v1",
         )
-        assert attempts == 2 and recipe.call_count == 2
+        assert attempts == 1 + len(info) and recipe.call_count == 2
         assert all(call.request.method == "GET" for call in routes.calls)
         assert all(call.request.headers["apikey"] == "synthetic-worker-key"
                    for call in recipe.calls)
@@ -363,14 +433,21 @@ async def test_transient_recovery_cannot_bypass_an_invalid_inventory(tmp_path, i
     records, info = inventories
     del info["UnionLoader"]
     monkeypatch.setattr(startup, "STARTUP_RETRY_SECONDS", 0)
+    attempts = 0
+
+    async def inventory(request):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise httpx.ReadTimeout("synthetic timeout")
+        return inventory_response(request, info)
+
     with respx.mock() as routes:
         recipe = routes.get(RECIPE_URL).respond(200, json=records)
-        local = routes.get(COMFY + "/object_info").mock(side_effect=[
-            httpx.ReadTimeout("synthetic timeout"), httpx.Response(200, json=info),
-        ])
+        local = mock_inventory(routes, info).mock(side_effect=inventory)
         with pytest.raises(startup.VideoStartupError, match="node"):
             await startup.qualify_video_startup(**options(tmp_path))
-        assert recipe.call_count == 2 and local.call_count == 2
+        assert recipe.call_count == 2 and local.call_count == 5
 
 
 @pytest.mark.asyncio
@@ -381,7 +458,7 @@ async def test_transport_retry_exhaustion_cannot_advertise(tmp_path, inventories
     monkeypatch.setattr(startup, "STARTUP_RETRY_SECONDS", 0)
     with respx.mock(assert_all_called=False) as routes:
         recipe = routes.get(RECIPE_URL).respond(200, json=records)
-        local = routes.get(COMFY + "/object_info")
+        local = routes.get(url__regex=COMFY + r"/object_info/[^/]+$")
         failed = recipe if target == "core" else local
         failed.mock(side_effect=httpx.ReadTimeout("synthetic timeout"))
         with pytest.raises(startup.VideoStartupError):
@@ -406,7 +483,7 @@ async def test_startup_cancellation_never_retries(tmp_path, inventories, monkeyp
 
     with respx.mock(assert_all_called=False) as routes:
         recipe = routes.get(RECIPE_URL).respond(200, json=records)
-        local = routes.get(COMFY + "/object_info").mock(side_effect=cancelled)
+        routes.get(url__regex=COMFY + r"/object_info/[^/]+$").mock(side_effect=cancelled)
         with pytest.raises(asyncio.CancelledError):
             await startup.qualify_video_startup(**options(tmp_path))
         assert recipe.call_count == 1 and attempts == 1
@@ -459,7 +536,7 @@ async def test_normal_run_advertises_only_after_verified_startup(
         ]
         with respx.mock() as routes:
             routes.get(RECIPE_URL).respond(200, json=records)
-            routes.get(COMFY + "/object_info").respond(200, json=info)
+            mock_inventory(routes, info)
             with pytest.raises(asyncio.CancelledError):
                 await worker.run()
         assert payloads[0]["models"] == [MODEL]
@@ -501,7 +578,7 @@ async def test_normal_run_rejects_bypasses_before_registration(
         with respx.mock() as routes:
             if bypass == "bad-inventory":
                 routes.get(RECIPE_URL).respond(200, json=records)
-                routes.get(COMFY + "/object_info").respond(200, json=info)
+                mock_inventory(routes, info)
             with pytest.raises(RuntimeError):
                 await worker.run()
         session.assert_not_awaited()

@@ -22,6 +22,9 @@ and the WebSocket worker.
   credentials confined to Core and no render or early capability. Bad inventory
   still rejects after transient recovery; cancellation cannot retry. These
   synthetic faults do not explain or reproduce every native startup timeout.
+  Targeted inventory tests require only governed nodes, full weight/source
+  coverage, strict response names and aggregate bounds. Invalid Core contracts
+  cannot trigger local reads; there is no full-inventory fallback.
 - `test_operator_rough_edges.py` - cold-start inventory/discovery, portable
   port-conflict diagnostics, install-relative defaults, advertised status, and
   advisory price-book aliases/fetch failures.

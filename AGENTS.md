@@ -125,6 +125,7 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   authenticated Core inventory. Signed-profile/blind-trust overrides reject.
   Transient startup reads have a bounded retry; every attempt rechecks the full
   inventory before advertising. Authentication/schema/state failures do not retry.
+  Read only the recipe's required ComfyUI nodes, not every unrelated plugin.
   `GRID_VIDEO_SOURCE_MODES` defaults empty; Core's shared source feature requires
   all governed modes, not an audio-only or video-only subset. Core's separate
   candidate implements original-worker leased reconnect authorization; joint

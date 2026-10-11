@@ -54,6 +54,10 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   or ambient proxies. Check every returned contract, node and referenced file.
   Core's shared source feature requires the full governed source-mode set;
   partial support must not advertise it. Never submit an unpaid smoke render.
+  Validate Core's contracts before fetching only their required node classes
+  through `/object_info/{node_class}`. Never invoke the full plugin inventory;
+  unrelated handlers must not gate video startup. Bound the combined response
+  bytes to 16 MiB and distinct nodes to 128; exact returned names are required.
   Retry only transport/network timeouts, at most three complete 30-second
   read-only checks with two seconds between attempts. Re-fetch and verify Core
   recipes and ComfyUI inventory each time; no partial result authorizes support.

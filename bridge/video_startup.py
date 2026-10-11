@@ -48,7 +48,7 @@ async def _read_json(client: httpx.AsyncClient, url: str, *, limit: int, headers
             if len(content) + len(chunk) > limit:
                 raise VideoStartupError("Video startup inventory exceeds its limit")
             content.extend(chunk)
-    return json.loads(content)
+    return json.loads(content), len(content)
 
 
 def _require_files(requirements: dict, inventory: dict) -> None:
@@ -83,13 +83,14 @@ def _require_files(requirements: dict, inventory: dict) -> None:
         raise VideoStartupError("A governed video weight is missing from ComfyUI")
 
 
-def _verify_recipes(value: dict, inventory: dict, model: str, modes: list[str]) -> None:
+def _recipe_requirements(value: dict, model: str, modes: list[str]) -> list[dict]:
     if not isinstance(value, dict) or value.get("model") != model:
         raise VideoStartupError("Core returned a different video model")
     records = value.get("recipes")
     if not isinstance(records, list) or not 1 <= len(records) <= 4:
         raise VideoStartupError("Core returned no bounded governed video recipes")
     roots = set()
+    requirements = []
     for record in records:
         if not isinstance(record, dict) or record.get("job_type") != "video":
             raise VideoStartupError("Core returned a non-video recipe")
@@ -124,15 +125,43 @@ def _verify_recipes(value: dict, inventory: dict, model: str, modes: list[str]) 
             raise VideoStartupError(
                 "The shared source capability requires every governed source mode"
             )
-        _require_files(record, inventory)
+        requirements.append(record)
         sources = record.get("source_requirements")
         if not isinstance(sources, dict) or set(sources) != set(supported):
             raise VideoStartupError("Core lacks the governed video source requirements")
         for mode in modes:
-            requirements = sources[mode]
-            if not isinstance(requirements, dict):
+            source = sources[mode]
+            if not isinstance(source, dict):
                 raise VideoStartupError("Invalid governed video source requirements")
-            _require_files(requirements, inventory)
+            requirements.append(source)
+    for required in requirements:
+        _strings(required.get("node_types"), limit=128)
+        _strings(required.get("model_files"), limit=32)
+    return requirements
+
+
+async def _read_inventory(client: httpx.AsyncClient, origin: str, requirements: list[dict]):
+    names = set().union(*(set(required["node_types"]) for required in requirements))
+    if len(names) > 128 or any(
+        name in (".", "..") or any(char in name for char in "/\\?#")
+        or any(ord(char) < 32 or ord(char) == 127 for char in name)
+        for name in names
+    ):
+        raise VideoStartupError("Invalid governed video node names")
+    inventory = {}
+    remaining = MAX_INVENTORY_BYTES
+    for name in sorted(names):
+        if remaining <= 0:
+            raise VideoStartupError("Video startup inventory exceeds its limit")
+        node, size = await _read_json(
+            client, origin.rstrip("/") + "/object_info/" + quote(name, safe=""),
+            limit=remaining,
+        )
+        remaining -= size
+        if not isinstance(node, dict) or set(node) != {name} or not isinstance(node[name], dict):
+            raise VideoStartupError("A governed video node is missing or invalid")
+        inventory.update(node)
+    return inventory
 
 
 async def qualify_video_startup(
@@ -192,20 +221,16 @@ async def qualify_video_startup(
                 follow_redirects=False,
                 trust_env=False,
             ) as client:
-                records = await _read_json(
+                records, _ = await _read_json(
                     client,
                     f"{base}/v1/models/{quote(models[0], safe='')}/recipe",
                     limit=MAX_RECIPE_BYTES,
                     headers={"apikey": api_key},
                 )
-                inventory = await _read_json(
-                    client,
-                    comfy_url.rstrip("/") + "/object_info",
-                    limit=MAX_INVENTORY_BYTES,
-                )
-                if not isinstance(inventory, dict):
-                    raise VideoStartupError("Invalid local ComfyUI inventory")
-                _verify_recipes(records, inventory, models[0], source_modes)
+                requirements = _recipe_requirements(records, models[0], source_modes)
+                inventory = await _read_inventory(client, comfy_url, requirements)
+                for required in requirements:
+                    _require_files(required, inventory)
 
         for attempt in range(STARTUP_MAX_ATTEMPTS):
             try:
