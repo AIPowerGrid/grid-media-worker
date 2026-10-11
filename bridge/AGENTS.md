@@ -15,6 +15,14 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   `videos`/`video` entries and Video Helper Suite's legacy `gifs` key, which may
   contain MP4 output. A completed prompt without a supported output fails
   immediately; a bounded timeout interrupts a genuinely stuck prompt.
+- **Candidate video recovery:** `render_journal.py` - private SQLite execution
+  identity and MP4 byte cache for marked, single-video recipe jobs. Persist
+  the preassigned prompt ID and submitting state before the sole `/prompt`
+  POST. ComfyUI accepts that ID but does not deduplicate submissions. Unknown
+  acceptance can only observe the saved ID; never POST again or interrupt
+  a shared runtime. Recover cached bytes before upload/DONE retries.
+  `render_retention.py` owns the bounded rig-bound Core terminal-state client;
+  it is not financial authority or local-time expiry.
 - **Mapping:** `model_mapper.py` — grid model name → workflow filename (`DEFAULT_WORKFLOW_MAP`
   + img2img map), and checkpoint-file → grid-name resolution via the local model reference.
 - **Templating:** `workflow.py` — two paths. `build_recipe_workflow(job, payload)` executes a
@@ -22,6 +30,12 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   only; never invents structure) — the primary dispatch mode. `build_workflow(job)` is the local
   fallback: loads the mapped graph and fills prompt/seed/dimensions/batch/output-prefix, handling
   both graph shapes and the `_bridge` block.
+  `recipe_image_bindings` maps at most sixteen source indices to unique declared
+  `LoadImage.inputs.image` slots. Validate all bindings before fetching and refuse
+  unbound image nodes. Repeated source URLs reuse one upload; downloads are streamed
+  under the 12 MiB per-image limit. Preserve the supplied graph.
+  Bind the actual ComfyUI upload filename, including collision renames; reject
+  returned paths, unexpected subfolders and non-input identities.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
 - **Detection/UI:** `comfyui_detect.py` (find/install ComfyUI for the wizard); `web/` — control
   UI and local capability inventory, owned in its own AGENTS.md. Inventory is descriptive;
@@ -52,6 +66,75 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
 ## Local Contracts
 
 - Keep transport payload adaptation in `ws_worker.py`, not `workflow.py`.
+- Registration advertises `recipe-image-bindings-v1` for Core's multi-reference
+  dispatch compatibility check. This does not attest execution or model fidelity.
+  Multiple sources without explicit bindings fail, never fall back to one image.
+- No worker release yet advertises `async-video-resume-v1`. A marked video
+  requires `GRID_COMFYUI_STATE_DIR`, a loopback runtime, one MP4 upload slot,
+  one Core-assigned seed and a governed ComfyUI recipe; LoRAs and batches are
+  not supported in this candidate path. Legacy requests are unchanged.
+  The ComfyUI submission/polling client ignores ambient HTTP proxies; validate
+  its actual base URL, not a changed Settings value, before durable execution.
+  Core's candidate reconnect delivery sets top-level `resume: true` without
+  changing the immutable payload. Missing local render identity on a resume
+  fails uncertain before graph construction; never treat lost state as a new
+  render. Core owns the original-worker/model lease and issues fresh
+  attempt-isolated upload slots. Its private execution token is not a worker
+  credential or wire field. Joint qualification remains required; this worker
+  guard does not itself implement or prove Core's authorization handoff.
+  Core's candidate async terminal now source-conditionally copies the MP4 to
+  a unique key the worker cannot write, then hashes those bytes before payment.
+  DONE must report the exact uploaded/cache digest; the mutable PUT slot is
+  not the final paid-result URL. Invalid bytes can release only the owning
+  lease's hold; storage uncertainty cannot authorize payment or ACK. This
+  byte-integrity contract is not codec/quality/fidelity or live R2 proof.
+- The candidate journal is namespaced to Core's account-owned worker UUID from
+  the authenticated ready frame, worker name, Grid endpoint and ComfyUI endpoint.
+  Missing/invalid worker IDs fail closed. Reconnect resets the local journal
+  handle so its owner is rechecked. API-key rotation within the same Core worker
+  identity does not invalidate the cache; changing identity/name/endpoints
+  requires operator reconciliation, never deletion to rerender. Keep each GPU's
+  state separate.
+  POSIX requires operator-owned `0700` directories and `0600` regular files;
+  Windows ACL/crash qualification remains a release gate. No raw prompt,
+  graph, credential, secret-derived identifier or upload URL is stored in the
+  journal. Generated MP4s are private user content, not public validator evidence.
+- Bind both the exact submitted graph hash and a pre-submission exact-number
+  normalized hash. ComfyUI FLOAT validation changes `24` to `24.0`; only safe
+  integral floats normalize. Booleans, strings, fractions, different nodes,
+  paths and parameters must still conflict. Old rows never infer a missing
+  normalized commitment from returned history.
+- Cache expected byte hash/size before atomic rename and fsync. Enforce
+  256 KiB commitments, 4 MiB observations, 256 MiB per MP4, 1 GiB aggregate
+  cache and 1024 total identities. A cached-job ACK or Core-confirmed `closed`
+  commits nullable `closed_at` before deleting only that prompt's private MP4/
+  partial cache. Repeat cleanup after a crash; clear its accounted size only
+  after unlink and directory fsync. Retain at most 128 confirmed closed rows.
+  Unknown/held rows are never pruned. Old ACK rows with NULL closure metadata
+  require fresh Core confirmation. Closed content cannot be cached or served.
+  At unresolved capacity, stop/reconcile rather than forgetting a render.
+- Before every marked video creates local identity, builds a graph or submits
+  Comfy work, require a matching current `held` from Core's private
+  `/v1/workers/self/media-jobs`. This prevents rerendering old closed IDs even
+  after bounded local history is pruned. Reconcile lost ACKs every 60 seconds,
+  at most 32 IDs per call; check all retained IDs, not only the first batch.
+  Use a dedicated rig-bound worker credential and the configured HTTPS
+  `GRID_API_URL` origin (plain HTTP only on loopback), never the WS-only host.
+  Do not follow redirects or ambient proxies; bound the whole request to ten
+  seconds and response to 4096 bytes. Validate schema, ready-frame worker UUID
+  and exact requested ID set. Unknown/expired/missing/foreign jobs or unavailable
+  Core preserve local state and cannot authorize work or deletion.
+  This cleans the worker journal cache only, not ComfyUI input/output files or
+  Core's R2 objects. Joint retention/recovery canaries remain required before
+  advertisement. Legacy and normal managed-audio jobs are unchanged.
+- A definite backend rejection/execution or invalid completed-output failure
+  may send a generic error. Unknown transport, cache or delivery failures close
+  the WebSocket without a terminal failure/refund request. Core owns financial
+  expiry and must independently authorize/settle the original execution.
+- Native ComfyUI SaveVideo uses an `images` envelope for MP4 output. Video
+  collection recognizes it without image re-encoding; the candidate cache
+  still validates MP4 magic and bounds. This is not codec, quality or fidelity
+  certification; live qualification must inspect the actual video/audio.
 - Requested recipe LoRAs must resolve and inject or the job fails before
   rendering. Missing injection maps never silently drop a requested modifier.
   The `done.loras` list reports filenames, not model-fidelity proof. Downloads

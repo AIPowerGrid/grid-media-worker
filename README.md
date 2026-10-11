@@ -77,6 +77,61 @@ models only — image and video models never appear there. The legacy poll-based
 API from before the demand-billing launch is retired and answers `410 Gone`;
 all submission goes through `/v1/*`.
 
+## Candidate async video recovery
+
+This branch contains an isolated single-video execution journal, not a public
+async-video release. Normal workers do not advertise resume support. Core's
+async admission must remain off until its candidate original-worker lease,
+this journal, retention and paid storage/restart canaries pass together.
+
+For qualification, set `GRID_COMFYUI_STATE_DIR` to a private, persistent directory
+outside the source checkout, unique to the worker and local ComfyUI instance.
+On POSIX it must be owned by the operator with `0700` permissions; the journal
+and MP4 cache use `0600` files. Do not remove it to retry a job. Changing the
+Core worker identity, worker name or endpoint requires reconciliation of retained
+work. API-key rotation for the same registered worker preserves its cache.
+Windows ACL and crash behavior are not yet qualified.
+
+Marked, Core-governed videos save a ComfyUI prompt ID before submission, then
+observe that same ID after a lost reply or restart. An uncertain acceptance is
+never submitted again: ComfyUI's requested prompt ID is not an idempotency key.
+Finished MP4 bytes are hash-verified and cached before presigned upload and DONE.
+Native SaveVideo's MP4-in-`images` output is supported. Uncertain delivery closes
+the connection; only Core can decide refunds, completion and worker rewards.
+Core's candidate reconnect sends `resume: true` with the original job/model/
+payload and fresh, attempt-isolated upload slots. A worker without that job's
+local identity refuses instead of creating another render. Core's synthetic
+crash tests and the worker's separate native smoke test are not joint paid
+GPU/R2 qualification.
+
+Core's candidate paid terminal copies the upload to a unique worker-unwritable
+key and hashes that copy before settlement. The DONE digest must match the
+cached/uploaded bytes. The paid result is that frozen copy, not the worker's
+still-valid PUT slot. Storage uncertainty leaves the hold recoverable without
+ACK; byte integrity is not model-fidelity or video-quality certification.
+
+The cache is bounded to 256 MiB per MP4 and 1 GiB total, with 1024 total job
+identities. A cached-job ACK or Core-confirmed terminal state commits local
+closure before deleting its private MP4/partial cache. Cleanup repeats safely
+after restart. Keep at most 128 confirmed-closed identities; unresolved jobs
+are never automatically pruned. At unresolved capacity the worker stops this
+path for operator review.
+
+This path requires a dedicated, rig-bound worker credential and the configured
+HTTPS `GRID_API_URL` origin (HTTP only on loopback), not a WS-only hostname.
+Before any marked job creates state or submits Comfy work, Core must confirm
+the same registered worker and current held job through
+`POST /v1/workers/self/media-jobs`. Every 60 seconds the worker reconciles local
+jobs to recover lost ACKs. Checks are bounded; credentials never follow a
+redirect or ambient proxy. Unknown/expired/unavailable state is not closure
+and cannot authorize either deletion or another render. Mandatory preflight
+also rejects a closed ID after its bounded local history has been pruned.
+Old ACK rows require fresh confirmation. This does not delete ComfyUI's own
+inputs/outputs or Core's R2 objects; joint retention qualification remains open.
+Raw prompts, graphs, credentials and upload URLs are not stored in the journal;
+cached videos remain private user content. Batch/LoRA and shared remote runtimes
+are not supported by this candidate path.
+
 ## Serving a listed model: use GRID_PREFLIGHT
 
 For recipe-backed ComfyUI jobs, the workflow comes from the grid's reviewed

@@ -22,6 +22,19 @@ and the WebSocket worker.
   and extra outputs must not become a successful result.
   Recipe batches also prove independent arbitrary seeds, unique output prefixes,
   input preservation, and no uploads when a later render fails.
+- `test_render_journal.py` - actual local SQLite multi-process submit-once
+  guards, private state, bounds, immutable request/runtime identity, retained
+  byte integrity, rename/commit crash recovery, expired/uncertain acceptance,
+  exact-number graph normalization and native SaveVideo output. Mocked HTTP
+  and WS cases prove lost-reply/restart recovery and re-upload after PUT/DONE
+  failure without a second render. These do not prove Core reconnect routing,
+  R2 settlement, Windows ACLs or GPU fidelity. The feature stays unadvertised.
+- `test_render_retention.py` - strict Core-origin/schema/worker/ID binding,
+  response bounds, no redirect/proxy credentials, refused preflight, bounded
+  closed history, legacy closure migration, pending-file preservation and
+  periodic lost-ACK recovery. A real child process exits after SQLite closure
+  commits but before unlink; cleanup resumes safely. HTTP/Core/GPU remain
+  fixtures, not joint paid qualification.
 - `test_model_mapper.py` - model-reference resolution, capability inventory,
   and retired-capability advertisement guards.
 - `test_worker_identity.py` - worker-key custody, payout-wallet delegation,
@@ -66,6 +79,8 @@ and the WebSocket worker.
   nodes without modifying the supplied recipe.
   Independent image-output binding rejects missing, linked, ambiguous seed
   layouts and unsupported batch nodes rather than issuing misleading receipts.
+  Timed-image tests cover exact slot/index correspondence, URL deduplication,
+  graph preservation, invalid/unbound slots and streamed source-size limits.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
 
 ## Local Contracts

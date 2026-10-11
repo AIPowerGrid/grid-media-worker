@@ -87,6 +87,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   supported Python version and audits the complete locked default, test, and
   release dependency set. CI must not fall back to an ad hoc pip install when
   package metadata or the lock is broken.
+  Retain the reviewed multidict 6.9.1 security floor; dependency edits require
+  a frozen-lock install, full tests and a complete locked dependency audit.
 
 ## Local Contracts
 
@@ -107,6 +109,13 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   never promotes it to qualification or advertisement.
 - **No standing storage creds on the worker.** Outputs upload only to
   Grid-issued presigned URLs from the job message.
+- **Durable async video remains a candidate:** `bridge/render_journal.py`
+  persists a single governed video's ComfyUI identity and bounded MP4 cache
+  before upload. Enable its private directory only for isolated qualification;
+  registration does not advertise `async-video-resume-v1`. Core's separate
+  candidate implements original-worker leased reconnect authorization; joint
+  native-worker/GPU/storage recovery, retention and paid canaries must pass
+  before public async admission. Local state cannot authorize a charge or payout.
 - **All config is env-driven** through `bridge/config.py` (`Settings`); the UI persists changes
   to `.env`. `GRID_API_KEY` is required.
 - **Worker profiles are fail-closed:** `bridge/profiles/` validates signed,

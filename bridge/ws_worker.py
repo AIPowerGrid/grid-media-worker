@@ -16,12 +16,14 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 import os
 import secrets
 import ssl
-import logging
 import time
+from typing import Any, cast
 from urllib.parse import urlencode, urlsplit
+from uuid import UUID
 
 import httpx
 
@@ -30,13 +32,13 @@ try:
 except ImportError:  # pragma: no cover
     websockets = None
 
-from .config import Settings
 from .capacity import (
     effective_concurrency,
     load_schedule,
     validate_max_concurrency,
     validate_schedule,
 )
+from .config import Settings
 from .model_mapper import (
     get_grid_models,
     initialize_model_mapper,
@@ -44,14 +46,23 @@ from .model_mapper import (
     model_mapper,
 )
 from .pricing_check import fetch_priced_model_names, unsellable_names
+
 try:
     from .model_mapper import is_servable
 except ImportError:  # older worker forks lack the servability gate — advertise as-is
     def is_servable(_m):
         return (True, "")
-from .workflow import build_workflow, recipe_image_output
 from .image_output import encode_image_output
 from .loras import apply_recipe_loras
+from .render_journal import (
+    DurableVideoRenderer,
+    RenderFailed,
+    RenderJournal,
+    RenderUncertain,
+    digest,
+)
+from .render_retention import MAX_STATUS_IDS, fetch_states
+from .workflow import build_workflow, recipe_image_output
 
 logger = logging.getLogger(__name__)
 
@@ -212,13 +223,15 @@ def media_result_hash(results: list[dict], recipe_root: str | None = None) -> st
 
 class WSWorker:
     def __init__(self):
-        self.comfy = httpx.AsyncClient(base_url=Settings.COMFYUI_URL, timeout=300)
+        self.comfy = httpx.AsyncClient(base_url=Settings.COMFYUI_URL, timeout=300, trust_env=False)
         self.models: list[str] = []
         self.job_types: list[str] = list(Settings.GRID_JOB_TYPES)
         self.profile_metadata: dict | None = None
         self.profile: dict | None = None
         self.direct_audio = False
         self._capacity_error: str | None = None
+        self._render_journal: RenderJournal | None = None
+        self._grid_worker_id: str | None = None
 
     async def run(self):
         if websockets is None:
@@ -333,10 +346,13 @@ class WSWorker:
             ready = json.loads(await asyncio.wait_for(ws.recv(), timeout=30))
             if ready.get("type") != "ready":
                 raise RuntimeError(f"Registration rejected: {ready}")
+            self._grid_worker_id = ready.get("worker_id")
+            self._render_journal = None
             logger.info(f"Registered as worker {ready.get('worker_id')}")
 
             health_task = asyncio.create_task(self._monitor_runtime_health())
             schedule_task = asyncio.create_task(self._wait_until_paused())
+            retention_task = asyncio.create_task(self._reconcile_render_cache())
             try:
                 while True:
                     receive_task = asyncio.create_task(ws.recv())
@@ -367,17 +383,73 @@ class WSWorker:
                     elif mtype == "job":
                         await self._handle_job(ws, msg)
                     elif mtype == "ack":
+                        if self._render_journal is not None:
+                            await asyncio.to_thread(self._render_journal.acknowledge, msg.get("id"))
                         logger.info(f"Job {msg.get('id')} acked, den={msg.get('den')}")
                     elif mtype == "error":
                         logger.error(f"Server error: {msg.get('message')}")
             finally:
                 health_task.cancel()
                 schedule_task.cancel()
+                retention_task.cancel()
                 await asyncio.gather(
                     health_task,
                     schedule_task,
+                    retention_task,
                     return_exceptions=True,
                 )
+
+    async def _reconcile_render_cache(self) -> None:
+        while True:
+            if Settings.GRID_COMFYUI_STATE_DIR:
+                try:
+                    journal = await self._video_journal()
+                    await asyncio.to_thread(journal.cleanup_closed)
+                    ids = await asyncio.to_thread(journal.unresolved_ids)
+                    for start in range(0, len(ids), MAX_STATUS_IDS):
+                        states = await fetch_states(
+                            Settings.GRID_API_URL, Settings.GRID_API_KEY,
+                            self._grid_worker_id, ids[start:start + MAX_STATUS_IDS],
+                        )
+                        closed = [job_id for job_id, state in states.items() if state == "closed"]
+                        if closed:
+                            await asyncio.to_thread(journal.confirm_closed, closed)
+                except Exception as exc:  # noqa: BLE001 - preserve pending content on every uncertainty
+                    logger.warning("Render cache reconciliation deferred error_type=%s", type(exc).__name__)
+            await asyncio.sleep(60)
+
+    async def _video_journal(self) -> RenderJournal:
+        if not Settings.GRID_COMFYUI_STATE_DIR:
+            raise RenderFailed("Durable video state is not configured")
+        origin = urlsplit(str(self.comfy.base_url))
+        if (
+            origin.hostname not in {"127.0.0.1", "localhost", "::1"}
+            or origin.scheme not in {"http", "https"}
+            or origin.username or origin.password or origin.path not in {"", "/"}
+            or origin.query or origin.fragment
+        ):
+            raise RenderFailed("Durable ComfyUI must be a private loopback runtime")
+        worker_id = self._grid_worker_id
+        if not isinstance(worker_id, str):
+            raise RenderUncertain("Durable video requires Core's registered worker identity")
+        try:
+            if str(UUID(worker_id)) != worker_id:
+                raise ValueError("Noncanonical UUID")
+        except ValueError as exc:
+            raise RenderUncertain("Invalid registered Core worker identity") from exc
+        namespace = digest({
+            "comfy": str(self.comfy.base_url), "grid": grid_ws_url(),
+            "worker": Settings.GRID_WORKER_NAME, "worker_id": worker_id,
+        })
+        journal = self._render_journal
+        if journal is None:
+            journal = await asyncio.to_thread(
+                RenderJournal, Settings.GRID_COMFYUI_STATE_DIR, namespace=namespace,
+            )
+            self._render_journal = journal
+        elif journal.namespace != namespace:
+            raise RenderUncertain("Retained render state belongs to another runtime/worker")
+        return journal
 
     def _accepting_jobs(self) -> bool:
         try:
@@ -458,6 +530,7 @@ class WSWorker:
             "models": self.models,
             "job_types": self.job_types,
             "bridge_agent": BRIDGE_AGENT,
+            "media_features": ["recipe-image-bindings-v1"],
         }
         if self.profile_metadata is not None:
             payload["worker_profile"] = self.profile_metadata
@@ -485,8 +558,24 @@ class WSWorker:
         job_id = msg["id"]
         payload = dict(msg.get("payload", {}))
         upload_slots = msg.get("upload", [])
-        n = int(payload.get("n", 1) or 1)
+        durable = "_grid_media_job_version" in payload
+        n = payload.get("n", 1) if durable else int(payload.get("n", 1) or 1)
         logger.info(f"Job {job_id}: {msg.get('job_type')} model={msg['model']} n={n}")
+
+        if durable:
+            try:
+                await self._generate_durable_video(ws, msg, payload, upload_slots, n)
+            except RenderFailed:
+                await ws.send(json.dumps({"type": "error", "id": job_id,
+                                          "message": "Worker video generation definitively failed"}))
+            except Exception as exc:  # noqa: BLE001 - redact any failure without refunding uncertain execution
+                # A transport or state failure is not evidence of render failure.
+                # Close the connection so Core retains the original execution
+                # authorization; never send an error that would refund it here.
+                logger.warning("Async video retained for recovery error_type=%s", type(exc).__name__)
+                await ws.close(code=1011, reason="Async render retained for recovery")
+                raise RenderUncertain("Async video requires recovery") from None
+            return
 
         try:
             await self._generate_and_upload(ws, msg, payload, upload_slots, n)
@@ -497,6 +586,77 @@ class WSWorker:
                 "id": job_id,
                 "message": "Worker generation failed; see operator logs",
             }))
+
+    async def _generate_durable_video(
+        self,
+        ws: Any,
+        msg: dict[str, Any],
+        payload: dict[str, Any],
+        upload_slots: list[dict[str, Any]],
+        n: int,
+    ) -> None:
+        if (
+            type(payload.get("_grid_media_job_version")) is not int
+            or payload["_grid_media_job_version"] != 1
+            or msg.get("job_type") != "video"
+            or type(payload.get("n")) is not int
+            or n != 1
+            or len(upload_slots) != 1
+            or upload_slots[0].get("content_type") != "video/mp4"
+            or payload.get("recipe_engine") != "comfyui"
+            or not isinstance(payload.get("recipe_spec"), dict)
+            or not payload["recipe_spec"]
+            or type(payload.get("seed")) is not int
+            or not 0 <= payload["seed"] <= MAX_SEED
+            or payload.get("seeds") != [payload["seed"]]
+            or type(payload["seeds"][0]) is not int
+            or payload.get("loras")
+        ):
+            raise RenderFailed("Unsupported durable video contract")
+        journal = await self._video_journal()
+        binding = digest({"job_type": "video", "model": msg["model"], "payload": payload})
+
+        async def build() -> dict[str, Any]:
+            graph = await build_workflow(
+                {"id": msg["id"], "model": msg["model"], "payload": dict(payload)}
+            )
+            if not isinstance(graph, dict) or not graph:
+                raise RenderFailed("Governed workflow construction returned no graph")
+            return cast(dict[str, Any], graph)
+
+        renderer = DurableVideoRenderer(
+            self.comfy, journal, timeout=Settings.COMFYUI_JOB_TIMEOUT,
+        )
+        resume = msg.get("resume", False)
+        if type(resume) is not bool:
+            raise RenderUncertain("Invalid Core recovery authorization")
+        if resume and await asyncio.to_thread(journal.get, msg["id"]) is None:
+            raise RenderUncertain("Recovery requires the original retained render identity")
+        states = await fetch_states(
+            Settings.GRID_API_URL, Settings.GRID_API_KEY, self._grid_worker_id, [msg["id"]],
+        )
+        if states[msg["id"]] == "closed":
+            await asyncio.to_thread(journal.confirm_closed, [msg["id"]])
+            raise RenderUncertain("Core has closed this render")
+        if states[msg["id"]] != "held":
+            raise RenderUncertain("Core has not confirmed the original held execution")
+        retained = await asyncio.to_thread(journal.begin, msg["id"], binding)
+        progress = asyncio.create_task(self._relay_progress(ws, msg["id"], retained.prompt_id))
+        try:
+            content, filename = await renderer.render(msg["id"], binding, build)
+        finally:
+            progress.cancel()
+            try:
+                await progress
+            except asyncio.CancelledError:
+                logger.debug("Async video progress relay cancelled")
+            except Exception as exc:  # noqa: BLE001 - progress must not invalidate a retained output
+                logger.debug("Async video progress relay ended error_type=%s", type(exc).__name__)
+        # Cached bytes exist durably before any expiring upload permission or
+        # DONE frame is used. Failed delivery can re-upload these same bytes.
+        await self._upload_media(
+            ws, msg, payload, [payload["seed"]], [(content, "video", filename)], [],
+        )
 
     async def _generate_and_upload(self, ws, msg, payload, upload_slots, n):
         job_id = msg["id"]
@@ -553,6 +713,18 @@ class WSWorker:
                 f"Generation returned {len(media_items)} outputs; expected {n}"
             )
 
+        await self._upload_media(ws, msg, payload, seeds, media_items, loaded_loras)
+
+    async def _upload_media(
+        self,
+        ws: Any,
+        msg: dict[str, Any],
+        payload: dict[str, Any],
+        seeds: list[int],
+        media_items: list[tuple[bytes, str, str]],
+        loaded_loras: list[str],
+    ) -> None:
+        job_id, job_type, upload_slots = msg["id"], msg.get("job_type", "image"), msg.get("upload", [])
         # Validate the full batch before uploading or signing any result.
         encoded_items = [
             encode_image_output(data, upload_slots[i]["content_type"]) if kind == "image" else data
@@ -643,7 +815,13 @@ class WSWorker:
                 for img_info in node_data.get("images", []):
                     r = await self.comfy.get(_view_url(img_info))
                     r.raise_for_status()
-                    media_items.append((r.content, "image", img_info["filename"]))
+                    # Native SaveVideo puts MP4s in PreviewVideo's images key.
+                    kind = (
+                        "video"
+                        if job_type == "video" and img_info["filename"].lower().endswith(".mp4")
+                        else "image"
+                    )
+                    media_items.append((r.content, kind, img_info["filename"]))
             if media_items:
                 return media_items
             if status.get("status_str") == "error":

@@ -96,6 +96,7 @@ async def test_registration_payload_exposes_only_coarse_profile_metadata(tmp_pat
 
     assert payload["models"] == ["ace-step-v1.5-xl-turbo"]
     assert payload["job_types"] == ["audio"]
+    assert payload["media_features"] == ["recipe-image-bindings-v1"]
     assert payload["worker_profile"]["capability_tier"] == "audio.ace-step.standard"
     assert payload["worker_identity"]["payload"]["profile_digest"] == "a" * 64
     assert payload["worker_identity"]["payload"]["profile_recipe_root"] == "b" * 64
