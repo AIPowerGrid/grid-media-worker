@@ -36,6 +36,15 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   under the 12 MiB per-image limit. Preserve the supplied graph.
   Bind the actual ComfyUI upload filename, including collision renames; reject
   returned paths, unexpected subfolders and non-input identities.
+- `source_media.py` binds candidate audio/video sources to exact declared
+  `LoadAudio`/`LoadVideo` slots. Validate all roles, hash/size/timing/dimensions
+  and slots before any source/image fetch. Fetch only HTTPS presigned R2 origins
+  without redirects, proxies or Grid credentials; verify all bytes before a
+  loopback ComfyUI upload and bind its actual collision-renamed input filename.
+  Bound each transfer to 60 seconds and 12/32 MiB audio/video respectively.
+  Malformed/missing/unbound sources fail; never silently downgrade to T2V/I2V.
+  This candidate does not advertise `recipe-media-sources-v1` yet. Joint native
+  recovery/source-retention/billing tests are required before advertisement.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
 - **Detection/UI:** `comfyui_detect.py` (find/install ComfyUI for the wizard); `web/` — control
   UI and local capability inventory, owned in its own AGENTS.md. Inventory is descriptive;

@@ -7,6 +7,7 @@ from typing import Dict, Any
 from .utils import generate_seed
 from .model_mapper import get_workflow_file
 from .config import Settings
+from .source_media import download_source, validate_bindings
 
 MAX_SOURCE_IMAGE_BYTES = 12 * 1024 * 1024
 MAX_RECIPE_IMAGES = 16
@@ -73,6 +74,8 @@ async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) ->
     workflow.pop("_grid", None)
     workflow.pop("_bridge", None)
 
+    source_bindings = validate_bindings(workflow, payload)
+
     job_id = job.get("id", "")
 
     # ComfyUI may cache an otherwise identical SaveVideo/VHS output node and
@@ -132,6 +135,10 @@ async def build_recipe_workflow(job: Dict[str, Any], payload: Dict[str, Any]) ->
         for path in (image_paths if isinstance(image_paths, list) else [image_paths]):
             _set_graph_path(workflow, path, filename)
         print(f"[recipe] bound source image {filename} -> {image_paths}")
+
+    for binding, source in source_bindings:
+        filename = await download_source(source)
+        _set_graph_path(workflow, binding["path"], filename)
 
     # Batch: honor n>1 by setting batch_size on any empty-latent node (best effort).
     batch = int(payload.get("batch_size") or 1)

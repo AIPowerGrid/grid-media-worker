@@ -81,6 +81,10 @@ and the WebSocket worker.
   layouts and unsupported batch nodes rather than issuing misleading receipts.
   Timed-image tests cover exact slot/index correspondence, URL deduplication,
   graph preservation, invalid/unbound slots and streamed source-size limits.
+- `test_source_media.py` - role/slot/unit/digest validation before downloads,
+  source graph preservation, exact byte counts/hashes, R2-only reads, redirect
+  denial and actual collision-renamed ComfyUI filenames. These mocked transfers
+  are not joint GPU/R2 or paid lifecycle evidence.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
 
 ## Local Contracts

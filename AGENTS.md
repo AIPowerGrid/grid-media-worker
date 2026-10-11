@@ -99,9 +99,15 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   presigned R2 uploads. The retired polling client is not shipped.
 - **Recipe-executor dispatch (primary):** the grid resolves a job's `recipe_spec` server-side
   and pushes the graph; `bridge/workflow.py:build_recipe_workflow` runs that core-resolved spec
-  directly (binding only supplied source images into declared slots). This is the forward
+  directly (binding supplied sources only into declared slots). This is the forward
   dispatch mode — "add a recipe in core → it runs here" — preferred over local model→workflow
   mapping.
+- **Source audio/video remains a private candidate:** `bridge/source_media.py`
+  binds Core-issued exact-role, byte/hash/timing commitments into governed
+  `LoadAudio`/`LoadVideo` slots. Downloads use HTTPS R2 without Grid credentials
+  or redirects, then upload to loopback ComfyUI with collision-safe names.
+  No public `recipe-media-sources-v1` advertisement is enabled. Native joint
+  transport, source privacy/retention and paid lifecycle evidence remain gates.
 - **Advertise only what you can serve:** a model is advertised only when its workflow file is
   resolvable and every referenced weight is present in ComfyUI. With `WORKFLOW_FILE` set,
   models are derived from the checkpoint files in those graphs via the local model reference;
