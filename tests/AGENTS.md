@@ -25,8 +25,10 @@ and the WebSocket worker.
 - `test_render_journal.py` - actual local SQLite multi-process submit-once
   guards, private state, bounds, immutable request/runtime identity, retained
   byte integrity, rename/commit crash recovery, expired/uncertain acceptance,
-  exact-number graph normalization and native SaveVideo output. Mocked HTTP
-  and WS cases prove lost-reply/restart recovery and re-upload after PUT/DONE
+  exact-number graph normalization and native SaveVideo output. Ignore
+  LoadVideo input previews without downloading or delivering them; retain
+  fail-closed checks for missing, unknown, temporary and extra real outputs.
+  Mocked HTTP and WS cases prove lost-reply/restart recovery and re-upload after PUT/DONE
   failure without a second render. These do not prove Core reconnect routing,
   R2 settlement, Windows ACLs or GPU fidelity. The feature stays unadvertised.
 - `test_render_retention.py` - strict Core-origin/schema/worker/ID binding,

@@ -155,7 +155,8 @@ class RenderJournal:
                 CREATE TABLE IF NOT EXISTS owner (id INTEGER PRIMARY KEY CHECK (id=1), namespace TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS renders (
                     job_id TEXT PRIMARY KEY, binding TEXT NOT NULL, prompt_id TEXT NOT NULL UNIQUE,
-                    phase TEXT NOT NULL CHECK (phase IN ('prepared','submitting','running','caching','cached','failed','acknowledged')),
+                    phase TEXT NOT NULL CHECK (phase IN (
+                        'prepared','submitting','running','caching','cached','failed','acknowledged')),
                     created REAL NOT NULL, graph_hash TEXT, sha256 TEXT, size INTEGER
                 );
             """)
@@ -242,7 +243,8 @@ class RenderJournal:
         with self._db() as db:
             db.execute("BEGIN IMMEDIATE")
             changed = db.execute(
-                "UPDATE renders SET phase='submitting', graph_hash=?, normalized_graph_hash=? WHERE job_id=? AND phase='prepared'",
+                "UPDATE renders SET phase='submitting', graph_hash=?, normalized_graph_hash=? "
+                "WHERE job_id=? AND phase='prepared'",
                 (graph_hash, normalized_graph_hash, _uuid(job_id)),
             )
             return changed.rowcount == 1
@@ -636,6 +638,13 @@ class DurableVideoRenderer:
                     and output["filename"].lower().endswith(".mp4")
                 ):
                     videos.append(output)
+        # LoadVideo publishes a UI preview of its input in the same envelope
+        # as SaveVideo. It is never a generated result or a download candidate.
+        videos = [
+            output
+            for output in videos
+            if not isinstance(output, dict) or output.get("type") != "input"
+        ]
         if len(videos) != 1 or not isinstance(videos[0], dict):
             raise RenderFailed("Single-video render did not return exactly one video")
         info = videos[0]

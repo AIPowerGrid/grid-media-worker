@@ -361,6 +361,79 @@ async def test_native_savevideo_images_envelope_recovers_as_video(journal):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("envelope", ["images", "videos", "video", "gifs"])
+@respx.mock
+async def test_source_video_preview_is_not_a_generated_result(journal, envelope):
+    row = ready(journal)
+    data = history(row)
+    data[row.prompt_id]["outputs"]["source"] = {
+        envelope: [{"filename": "source.mp4", "subfolder": "", "type": "input"}],
+        "animated": [True],
+    }
+    respx.get(ORIGIN + f"/history/{row.prompt_id}").mock(
+        return_value=httpx.Response(200, json=data)
+    )
+    view = respx.get(ORIGIN + "/view").mock(
+        return_value=httpx.Response(200, content=VIDEO)
+    )
+    async with httpx.AsyncClient(base_url=ORIGIN) as client:
+        assert (
+            await DurableVideoRenderer(client, journal).render(
+                row.job_id, BINDING, AsyncMock()
+            )
+        )[0] == VIDEO
+    assert view.call_count == 1
+    assert view.calls[0].request.url.params["filename"] == "test.mp4"
+    assert view.calls[0].request.url.params["type"] == "output"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("output_type", ["input", "temp", None])
+@respx.mock
+async def test_source_or_unknown_preview_alone_is_never_delivered(journal, output_type):
+    row = ready(journal)
+    data = history(row)
+    data[row.prompt_id]["outputs"]["1"] = {
+        "images": [{"filename": "source.mp4", "subfolder": "", "type": output_type}],
+        "animated": [True],
+    }
+    respx.get(ORIGIN + f"/history/{row.prompt_id}").mock(
+        return_value=httpx.Response(200, json=data)
+    )
+    async with httpx.AsyncClient(base_url=ORIGIN) as client:
+        with pytest.raises(RenderFailed if output_type == "input" else RenderUncertain):
+            await DurableVideoRenderer(client, journal).render(
+                row.job_id, BINDING, AsyncMock()
+            )
+    assert all(call.request.url.path != "/view" for call in respx.calls)
+    assert journal.cached(row.job_id) is None
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_source_preview_does_not_hide_multiple_real_video_outputs(journal):
+    row = ready(journal)
+    data = history(row)
+    data[row.prompt_id]["outputs"].update(
+        {
+            "source": {"images": [{"filename": "source.mp4", "type": "input"}]},
+            "extra": {"images": [{"filename": "second.mp4", "type": "output"}]},
+        }
+    )
+    respx.get(ORIGIN + f"/history/{row.prompt_id}").mock(
+        return_value=httpx.Response(200, json=data)
+    )
+    async with httpx.AsyncClient(base_url=ORIGIN) as client:
+        with pytest.raises(RenderFailed, match="exactly one"):
+            await DurableVideoRenderer(client, journal).render(
+                row.job_id, BINDING, AsyncMock()
+            )
+    assert all(call.request.url.path != "/view" for call in respx.calls)
+    assert journal.get(row.job_id).phase == "failed"
+    assert journal.cached(row.job_id) is None
+
+
+@pytest.mark.asyncio
 @respx.mock
 async def test_legacy_ws_collector_preserves_native_mp4_not_image(monkeypatch):
     monkeypatch.setattr(Settings, "COMFYUI_URL", ORIGIN)

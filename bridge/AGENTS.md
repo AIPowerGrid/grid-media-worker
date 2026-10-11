@@ -142,8 +142,12 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   expiry and must independently authorize/settle the original execution.
 - Native ComfyUI SaveVideo uses an `images` envelope for MP4 output. Video
   collection recognizes it without image re-encoding; the candidate cache
-  still validates MP4 magic and bounds. This is not codec, quality or fidelity
-  certification; live qualification must inspect the actual video/audio.
+  excludes explicitly `type: input` LoadVideo previews before requiring one
+  real `type: output` MP4. Missing/unknown/temporary identities and multiple
+  real outputs never become a result; input previews are not downloaded.
+  The candidate cache still validates MP4 magic and bounds. This is not codec,
+  quality or fidelity certification; live qualification must inspect the actual
+  video/audio.
 - Requested recipe LoRAs must resolve and inject or the job fails before
   rendering. Missing injection maps never silently drop a requested modifier.
   The `done.loras` list reports filenames, not model-fidelity proof. Downloads
