@@ -5,6 +5,8 @@
 
 import asyncio
 import copy
+import os
+from types import SimpleNamespace
 from urllib.parse import quote
 from unittest.mock import AsyncMock
 
@@ -20,6 +22,9 @@ MODEL = "LTX-2.5 Distilled BF16"
 CORE = "https://grid.test"
 COMFY = "http://127.0.0.1:8188"
 RECIPE_URL = f"{CORE}/v1/models/{quote(MODEL, safe='')}/recipe"
+POSIX_ONLY = pytest.mark.skipif(
+    os.name != "posix", reason="Durable video startup requires qualified POSIX state"
+)
 
 
 @pytest.fixture
@@ -109,6 +114,7 @@ def options(tmp_path, **overrides):
 
 
 @pytest.mark.asyncio
+@POSIX_ONLY
 @pytest.mark.parametrize(
     "modes,expected",
     [
@@ -155,6 +161,7 @@ async def test_read_only_startup_checks_exact_model_and_separates_credentials(
 
 
 @pytest.mark.asyncio
+@POSIX_ONLY
 @pytest.mark.parametrize(
     "overrides",
     [
@@ -182,19 +189,28 @@ async def test_invalid_configuration_never_contacts_core_or_comfy(tmp_path, over
 
 
 @pytest.mark.asyncio
-async def test_private_state_and_platform_gate_before_http(tmp_path, monkeypatch):
+@POSIX_ONLY
+async def test_private_state_gate_before_http(tmp_path):
     state = tmp_path / "private-state"
     state.mkdir(mode=0o755)
     with respx.mock() as routes:
         with pytest.raises(startup.VideoStartupError):
             await startup.qualify_video_startup(**options(tmp_path))
         assert not routes.calls
-    monkeypatch.setattr(startup.os, "name", "nt")
-    with pytest.raises(startup.VideoStartupError, match="POSIX"):
-        await startup.qualify_video_startup(**options(tmp_path))
 
 
 @pytest.mark.asyncio
+async def test_non_posix_gate_before_state_or_http(tmp_path, monkeypatch):
+    monkeypatch.setattr(startup, "os", SimpleNamespace(name="nt"))
+    with respx.mock() as routes:
+        with pytest.raises(startup.VideoStartupError, match="POSIX"):
+            await startup.qualify_video_startup(**options(tmp_path))
+        assert not routes.calls
+    assert not (tmp_path / "private-state").exists()
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
 @pytest.mark.parametrize(
     "missing", ["node", "weight", "misplaced-weight", "source-contract"]
 )
@@ -220,6 +236,7 @@ async def test_missing_source_requirements_do_not_advertise(
 
 
 @pytest.mark.asyncio
+@POSIX_ONLY
 async def test_source_free_worker_does_not_need_union_inventory(tmp_path, inventories):
     records, info = inventories
     del info["UnionLoader"]
@@ -233,6 +250,7 @@ async def test_source_free_worker_does_not_need_union_inventory(tmp_path, invent
 
 
 @pytest.mark.asyncio
+@POSIX_ONLY
 @pytest.mark.parametrize(
     "change", ["model", "schema", "variant", "duplicate-root", "partial-mode"]
 )
@@ -259,6 +277,7 @@ async def test_governed_identity_and_complete_source_feature(
 
 
 @pytest.mark.asyncio
+@POSIX_ONLY
 @pytest.mark.parametrize("failure", ["redirect", "status", "size", "json", "deadline"])
 async def test_bounded_inventory_failures(tmp_path, inventories, monkeypatch, failure):
     records, info = inventories
@@ -315,6 +334,7 @@ def video_settings(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+@POSIX_ONLY
 async def test_normal_run_advertises_only_after_verified_startup(
     video_settings, inventories, monkeypatch
 ):
@@ -352,7 +372,10 @@ async def test_normal_run_advertises_only_after_verified_startup(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("bypass", ["trust", "profile", "flag-off", "bad-inventory"])
+@pytest.mark.parametrize(
+    "bypass",
+    ["trust", "profile", "flag-off", pytest.param("bad-inventory", marks=POSIX_ONLY)],
+)
 async def test_normal_run_rejects_bypasses_before_registration(
     video_settings,
     inventories,
