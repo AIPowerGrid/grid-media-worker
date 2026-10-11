@@ -14,24 +14,37 @@ import httpx
 from .config import Settings
 
 LIMITS = {"reference_audio": (12 * 1024 * 1024, "audio/wav", "wav", "LoadAudio", "audio"),
-          "reference_video": (32 * 1024 * 1024, "video/mp4", "mp4", "LoadVideo", "file")}
+          "reference_video": (32 * 1024 * 1024, "video/mp4", "mp4", "LoadVideo", "file"),
+          "reference_image": (12 * 1024 * 1024, "image/png", "png", "LoadImage", "image")}
 R2_HOST = re.compile(r"[0-9a-f]{32}(?:\.(?:eu|fedramp))?\.r2\.cloudflarestorage\.com")
 
 
 def validate_bindings(workflow: dict, payload: dict) -> list[tuple[dict, dict]]:
     """Validate the entire source contract before any image/media fetch."""
     bindings, sources = payload.get("recipe_source_bindings"), payload.get("source_media")
-    if bindings is None and sources is None:
+    appearance = payload.get("appearance_profile")
+    if bindings is None and sources is None and appearance is None:
         return []  # Legacy recipes are unchanged.
     try:
         if (not isinstance(bindings, list) or not isinstance(sources, list)
-                or not 1 <= len(bindings) == len(sources) <= 2):
+                or not 1 <= len(bindings) == len(sources) <= 3):
+            raise ValueError
+        if appearance is not None and (
+                appearance != "ingredients-dev-v1" or payload.get("frames") != 121
+                or payload.get("width") != 768 or payload.get("height") != 448
+                or payload.get("steps") != 40 or payload.get("cfg_scale") != 2
+                or payload.get("source_image_url") or payload.get("source_image_urls")
+                or payload.get("recipe_image_inputs") or payload.get("recipe_image_bindings")
+                or any(isinstance(node, dict) and node.get("class_type") == "LoadImage" and name != "reference_image"
+                       for name, node in workflow.items())):
             raise ValueError
         if (type(payload.get("frames")) is not int or not 9 <= payload["frames"] <= 337
                 or payload["frames"] % 8 != 1 or type(payload.get("fps")) is not int):
             raise ValueError
         expected = {name for name, node in workflow.items()
                     if isinstance(node, dict) and node.get("class_type") in {"LoadAudio", "LoadVideo"}}
+        if appearance:
+            expected.add("reference_image")
         bound, roles = set(), set()
         for binding, source in zip(bindings, sources):
             if (not isinstance(binding, dict) or set(binding) != {"role", "path"}
@@ -39,6 +52,8 @@ def validate_bindings(workflow: dict, payload: dict) -> list[tuple[dict, dict]]:
                     or binding["role"] not in LIMITS or binding["role"] in roles):
                 raise ValueError
             role = binding["role"]
+            if role == "reference_image" and (not appearance or binding["path"] != "reference_image.inputs.image"):
+                raise ValueError
             limit, mime, _ext, kind, field = LIMITS[role]
             parts = binding["path"].split(".")
             if (len(parts) != 3 or parts[1:] != ["inputs", field] or parts[0] not in expected
@@ -57,7 +72,7 @@ def validate_bindings(workflow: dict, payload: dict) -> list[tuple[dict, dict]]:
             if (url.scheme != "https" or not R2_HOST.fullmatch(url.hostname or "")
                     or url.port not in {None, 443} or url.username or url.password or url.fragment):
                 raise ValueError
-            units = {"frames": payload["frames"], "fps": 24}
+            units = {} if role == "reference_image" else {"frames": payload["frames"], "fps": 24}
             if role == "reference_audio":
                 units.update(sample_rate=48_000, channels=2, samples=payload["frames"] * 2000)
             else:

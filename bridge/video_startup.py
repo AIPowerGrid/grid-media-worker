@@ -15,7 +15,8 @@ import httpx
 from .render_journal import RenderUncertain, prepare_state_directory
 from .render_retention import status_url
 
-MODELS = {"LTX-2.5 Distilled BF16": "distilled", "LTX-2.5 Dev BF16": "dev"}
+APPEARANCE_MODEL = "LTX-2.5 Dev BF16 Ingredients"
+MODELS = {"LTX-2.5 Distilled BF16": "distilled", "LTX-2.5 Dev BF16": "dev", APPEARANCE_MODEL: "dev"}
 MAX_RECIPE_BYTES = 512 * 1024
 MAX_INVENTORY_BYTES = 16 * 1024 * 1024
 STARTUP_DEADLINE_SECONDS = 30
@@ -110,6 +111,16 @@ def _recipe_requirements(value: dict, model: str, modes: list[str]) -> list[dict
         ):
             raise VideoStartupError("Core lacks the matching governed video contract")
         supported = contract.get("source_modes")
+        appearance = model == APPEARANCE_MODEL
+        if appearance:
+            if (contract.get("appearance_profile") != "ingredients-dev-v1"
+                    or type(contract.get("max_frames")) is not int or contract["max_frames"] != 121
+                    or type(contract.get("max_pixels")) is not int or contract["max_pixels"] != 768 * 448
+                    or type(contract.get("max_keyframes")) is not int or contract["max_keyframes"] != 0
+                    or set(modes) != {"audio", "video"}):
+                raise VideoStartupError("Core lacks the exact Ingredients profile and complete source modes")
+        elif contract.get("appearance_profile") is not None:
+            raise VideoStartupError("Appearance profile does not match the explicit worker model")
         if (
             not isinstance(supported, list)
             or len(supported) > 2
@@ -134,6 +145,14 @@ def _recipe_requirements(value: dict, model: str, modes: list[str]) -> list[dict
             if not isinstance(source, dict):
                 raise VideoStartupError("Invalid governed video source requirements")
             requirements.append(source)
+            if appearance:
+                nodes = _strings(source.get("node_types"), limit=128)
+                files = _strings(source.get("model_files"), limit=32)
+                if (not {"LoadImage", "RepeatImageBatch", "LTXICLoRALoaderModelOnly", "LTXAddVideoICLoRAGuide"} <= nodes
+                        or not {"ltx-2.5-22b-dev-transformer-bf16.safetensors",
+                                "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors"} <= files
+                        or mode == "video" and "LTXAddVideoICLoRAGuideAdvanced" not in nodes):
+                    raise VideoStartupError("Core lacks the governed Ingredients node and weight inventory")
     for required in requirements:
         _strings(required.get("node_types"), limit=128)
         _strings(required.get("model_files"), limit=32)
@@ -259,4 +278,4 @@ async def qualify_video_startup(
         ) from exc
     return ("async-video-resume-v1",) + (
         ("recipe-media-sources-v1",) if source_modes else ()
-    )
+    ) + (("recipe-appearance-reference-v1",) if models == [APPEARANCE_MODEL] else ())

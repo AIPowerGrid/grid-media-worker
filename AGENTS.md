@@ -110,6 +110,10 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   explicit candidate startup described below can declare it only after every
   governed source mode's node/file inventory checks. Native joint
   transport, source privacy/retention and paid lifecycle evidence remain gates.
+  The separate Ingredients candidate also binds an exact committed appearance
+  PNG, never an opening image. Its new `recipe-appearance-reference-v1` feature
+  requires explicit model/profile and complete source inventory qualification;
+  defaults, signed profiles and blind trust cannot implicitly enable it.
 - **Advertise only what you can serve:** a model is advertised only when its workflow file is
   resolvable and every referenced weight is present in ComfyUI. With `WORKFLOW_FILE` set,
   models are derived from the checkpoint files in those graphs via the local model reference;

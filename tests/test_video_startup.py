@@ -7,15 +7,15 @@ import asyncio
 import copy
 import os
 from types import SimpleNamespace
-from urllib.parse import quote, unquote
 from unittest.mock import AsyncMock
+from urllib.parse import quote, unquote
 
 import httpx
 import pytest
 import respx
 
-from bridge.config import Settings
 from bridge import video_startup as startup
+from bridge.config import Settings
 from bridge.ws_worker import WSWorker
 
 MODEL = "LTX-2.5 Distilled BF16"
@@ -66,6 +66,68 @@ def inventories():
         {"multiselect": False, "options": ["union.safetensors"]},
     ]
     return {"model": MODEL, "recipes": [record]}, info
+
+
+@pytest.fixture
+def appearance_inventories(inventories):
+    records, inventory = copy.deepcopy(inventories)
+    records["model"] = startup.APPEARANCE_MODEL
+    record = records["recipes"][0]
+    record["video_contract"].update(variant="dev", appearance_profile="ingredients-dev-v1",
+                                    max_frames=121, max_pixels=344064, max_keyframes=0)
+    nodes = ["LoadImage", "RepeatImageBatch", "LTXICLoRALoaderModelOnly", "LTXAddVideoICLoRAGuide"]
+    files = ["ltx-2.5-22b-dev-transformer-bf16.safetensors",
+             "ltx-2.5-22b-ic-lora-ingredients-0.9.safetensors"]
+    for mode in ("audio", "video"):
+        record["source_requirements"][mode]["node_types"].extend(nodes)
+        record["source_requirements"][mode]["model_files"].extend(files)
+    record["source_requirements"]["video"]["node_types"].append("LTXAddVideoICLoRAGuideAdvanced")
+    inventory.update({name: {"input": {"required": {"file": [files]}}}
+                      for name in nodes + ["LTXAddVideoICLoRAGuideAdvanced"]})
+    return records, inventory
+
+
+@pytest.mark.parametrize("modes", [[], ["audio"], ["video"]])
+def test_ingredients_startup_requires_all_sources_not_just_private_state(appearance_inventories, modes):
+    records, _inventory = appearance_inventories
+    with pytest.raises(startup.VideoStartupError, match="Ingredients"):
+        startup._recipe_requirements(records, startup.APPEARANCE_MODEL, modes)
+
+
+@pytest.mark.parametrize("change", [{"appearance_profile": None}, {"max_frames": 337},
+                                   {"max_frames": True}, {"max_keyframes": 1}, {"max_pixels": 522240}])
+def test_ingredients_startup_refuses_unqualified_contract(appearance_inventories, change):
+    records, _inventory = appearance_inventories
+    records["recipes"][0]["video_contract"].update(change)
+    with pytest.raises(startup.VideoStartupError, match="Ingredients"):
+        startup._recipe_requirements(records, startup.APPEARANCE_MODEL, ["audio", "video"])
+
+
+def test_ingredients_inventory_requires_actual_appearance_and_advanced_motion_nodes(appearance_inventories):
+    records, inventory = appearance_inventories
+    required = startup._recipe_requirements(records, startup.APPEARANCE_MODEL, ["audio", "video"])
+    for item in required:
+        startup._require_files(item, inventory)
+    del inventory["LTXAddVideoICLoRAGuideAdvanced"]
+    with pytest.raises(startup.VideoStartupError, match="node"):
+        startup._require_files(required[-1], inventory)
+
+
+@POSIX_ONLY
+@pytest.mark.asyncio
+@respx.mock
+async def test_ingredients_normal_startup_declares_feature_only_after_full_inventory(tmp_path, appearance_inventories):
+    records, inventory = appearance_inventories
+    url = f"{CORE}/v1/models/{quote(startup.APPEARANCE_MODEL, safe='')}/recipe"
+    respx.get(url).mock(return_value=httpx.Response(200, json=records))
+    for name, value in inventory.items():
+        respx.get(f"{COMFY}/object_info/{name}").mock(return_value=httpx.Response(200, json={name: value}))
+    features = await startup.qualify_video_startup(
+        models=[startup.APPEARANCE_MODEL], job_types=["video"], source_modes=["audio", "video"],
+        grid_api_url=CORE, api_key="synthetic-test-key", comfy_url=COMFY, state_dir=str(tmp_path / "state"),
+    )
+    assert features == ("async-video-resume-v1", "recipe-media-sources-v1", "recipe-appearance-reference-v1")
+    assert all(call.request.method == "GET" for call in respx.calls)
 
 
 @pytest.mark.parametrize(

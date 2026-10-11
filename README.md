@@ -104,8 +104,14 @@ an older Core fails closed instead of advertising unsupported video.
 For distilled audio/video conditioning, `GRID_VIDEO_SOURCE_MODES=audio,video`
 checks every source node/weight before adding `recipe-media-sources-v1`.
 The current Core feature covers both modes, so a partial list rejects rather
-than falsely declaring support. Leave it empty for source-free jobs; dev has
-no governed source modes yet. Flags or a directory alone do not advertise
+than falsely declaring support. Leave it empty for source-free jobs; standard
+dev has no governed source modes. The separate dark `LTX-2.5 Dev BF16 Ingredients`
+candidate requires both modes and the exact 768x448/121-frame profile plus all
+Ingredients/advanced-motion nodes and weights. Only then does startup add
+`recipe-appearance-reference-v1`. Its PNG role is appearance conditioning,
+not an opening image; it cannot be combined with opening pins. This candidate
+has no public price or joint native Grid qualification yet.
+Flags or a directory alone do not advertise
 anything. Inventory is protocol compatibility, not GPU model/fidelity, quality,
 public onboarding or paid-release approval. Core still owns admission and
 held-job authorization. Each GPU needs its own worker identity and directory.

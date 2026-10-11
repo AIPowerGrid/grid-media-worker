@@ -46,6 +46,10 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   Default workers do not advertise `recipe-media-sources-v1`. Candidate opt-in
   startup must validate all governed source inventories before declaring it;
   protocol inventory is not model/quality or public release qualification.
+  The Ingredients profile adds a third `reference_image` role, bound only to
+  `reference_image.inputs.image`. Fixed 768x448/121/40/CFG2 units and separate
+  PNG commitments are required; opening-image sources and other LoadImage
+  nodes reject before any fetch. No graph injection or role downgrade.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
 - **Video startup:** `video_startup.py` - default-off governed video compatibility
   check. Require one explicit LTX BF16 model and video-only jobs, private POSIX
@@ -54,6 +58,10 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   or ambient proxies. Check every returned contract, node and referenced file.
   Core's shared source feature requires the full governed source-mode set;
   partial support must not advertise it. Never submit an unpaid smoke render.
+  Explicit `LTX-2.5 Dev BF16 Ingredients` startup additionally checks the exact
+  `ingredients-dev-v1` capacity, both modes, Ingredients weights and advanced
+  motion nodes before declaring `recipe-appearance-reference-v1`. Standard Dev
+  and released/default workers do not acquire that capability.
   Validate Core's contracts before fetching only their required node classes
   through `/object_info/{node_class}`. Never invoke the full plugin inventory;
   unrelated handlers must not gate video startup. Bound the combined response

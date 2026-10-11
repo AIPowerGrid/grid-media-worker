@@ -106,6 +106,14 @@ and the WebSocket worker.
   source graph preservation, exact byte counts/hashes, R2-only reads, redirect
   denial and actual collision-renamed ComfyUI filenames. These mocked transfers
   are not joint GPU/R2 or paid lifecycle evidence.
+  Appearance cases cover three distinct source roles, fixed profile units,
+  refusal of opening-image reinterpretation and actual renamed PNG binding.
+  Startup cases require the exact Ingredients capacity and complete source/node/
+  weight inventory before adding its new feature; fixtures are not native proof.
+  Core's optional `test_ltx25_appearance.py` handoff points
+  `MEDIA_VIDEO_WORKER_SOURCE` at this reviewed checkout and uses this test
+  `.venv` to run the real adapter against synthetic two/three-role Core plans.
+  Mocked HTTP proves byte/slot compatibility, not GPU, live R2 or paid execution.
 - `image_compare/` - manual/historical image metadata comparison fixtures.
 
 ## Local Contracts
