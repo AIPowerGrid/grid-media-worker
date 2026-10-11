@@ -506,8 +506,8 @@ class DurableVideoRenderer:
         retained = await asyncio.to_thread(self.journal.cached, job_id)
         if retained is not None:
             return retained
-        self._check_deadline(row)
         if row.phase == "prepared":
+            self._check_deadline(row)
             graph = await build()
             self._check_deadline(row)
             if await asyncio.to_thread(
@@ -553,7 +553,9 @@ class DurableVideoRenderer:
                         )
                     await asyncio.to_thread(self.journal.running, job_id)
 
-        while time.time() <= row.created + self.timeout:
+        # Already-armed identities can inspect their exact history once even
+        # after observation expires; elapsed time is not proof of non-execution.
+        while True:
             row = await asyncio.to_thread(self.journal.require, job_id)
             retained = await asyncio.to_thread(self.journal.cached, job_id)
             if retained is not None:
@@ -590,6 +592,7 @@ class DurableVideoRenderer:
                         raise RenderUncertain("Retained video is missing")
                     return retained
             else:
+                self._check_deadline(row)
                 code, queue = await self._json("GET", "/queue")
                 if code != 200 or not isinstance(queue, dict):
                     raise RenderUncertain("ComfyUI queue unavailable")
@@ -615,10 +618,10 @@ class DurableVideoRenderer:
                     )
                 if matching:
                     await asyncio.to_thread(self.journal.running, job_id)
+            # Do not prolong polling, interrupt shared ComfyUI, or infer failure
+            # from missing/incomplete history. Core owns financial expiry.
+            self._check_deadline(row)
             await asyncio.sleep(self.poll_seconds)
-        # Do not interrupt a shared ComfyUI process or infer non-execution from
-        # absent history. Core reconciles financial expiry independently.
-        raise RenderUncertain("Render observation deadline elapsed; no resubmission")
 
     async def _download_video(self, record: dict[str, Any]) -> bytes:
         outputs = record.get("outputs")

@@ -50,6 +50,10 @@ and the WebSocket worker.
   failure without a second render. These do not prove Core reconnect routing,
   R2 settlement, Windows ACLs or GPU fidelity. Default advertisement stays off;
   the separate opt-in startup test covers compatibility only.
+  Expired already-armed work can recover one exact completed history without
+  rebuilding, reposting or changing creation time. Unproven history reads once
+  without download/polling; the real WS path refuses closed/unknown Core holds
+  before inspecting or delivering even a completed native result.
 - `test_render_retention.py` - strict Core-origin/schema/worker/ID binding,
   response bounds, no redirect/proxy credentials, refused preflight, bounded
   closed history, legacy closure migration, pending-file preservation and

@@ -518,6 +518,64 @@ async def test_expired_unsubmitted_render_never_builds_or_posts(journal):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["submitting", "running"])
+@respx.mock
+async def test_expired_completed_prompt_recovers_exact_history_without_reposting(
+    journal, phase
+):
+    row = ready(journal)
+    created = time.time() - 1000
+    with sqlite3.connect(journal.path) as database:
+        database.execute("UPDATE renders SET created=?, phase=?", (created, phase))
+    observed = respx.get(ORIGIN + f"/history/{row.prompt_id}").mock(
+        return_value=httpx.Response(200, json=history(row))
+    )
+    download = respx.get(ORIGIN + "/view").mock(
+        return_value=httpx.Response(200, content=VIDEO)
+    )
+    build = AsyncMock()
+    async with httpx.AsyncClient(base_url=ORIGIN) as client:
+        output = await DurableVideoRenderer(client, journal).render(row.job_id, BINDING, build)
+    assert output == (VIDEO, row.prompt_id + ".mp4")
+    assert observed.call_count == download.call_count == 1
+    assert journal.require(row.job_id).created == created
+    assert journal.require(row.job_id).phase == "cached"
+    build.assert_not_awaited()
+    assert all(call.request.method == "GET" for call in respx.calls)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fault", ["absent", "pending", "unavailable", "marker", "graph"])
+@respx.mock
+async def test_expired_unproven_prompt_remains_uncertain_without_polling_or_download(
+    journal, fault
+):
+    row = ready(journal)
+    created = time.time() - 1000
+    with sqlite3.connect(journal.path) as database:
+        database.execute("UPDATE renders SET created=?", (created,))
+    data = history(row, completed=fault != "pending")
+    if fault == "absent":
+        data = {}
+    elif fault == "marker":
+        data[row.prompt_id]["prompt"][3][MARKER]["binding"] = digest("wrong job")
+    elif fault == "graph":
+        data[row.prompt_id]["prompt"][2]["1"]["inputs"]["filename_prefix"] = "changed"
+    observed = respx.get(ORIGIN + f"/history/{row.prompt_id}").mock(
+        return_value=httpx.Response(503 if fault == "unavailable" else 200, json=data)
+    )
+    build = AsyncMock()
+    async with httpx.AsyncClient(base_url=ORIGIN) as client:
+        with pytest.raises(RenderUncertain):
+            await DurableVideoRenderer(client, journal).render(row.job_id, BINDING, build)
+    assert observed.call_count == 1 and len(respx.calls) == 1
+    assert journal.require(row.job_id).created == created
+    assert journal.require(row.job_id).phase == "running"
+    assert journal.cached(row.job_id) is None
+    build.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("reply", [{"prompt_id": str(uuid4())}, {"error": "accepted?"}])
 @respx.mock
 async def test_unproven_acceptance_is_retained_not_retried(journal, reply):
@@ -791,6 +849,71 @@ async def test_core_resume_with_missing_local_identity_never_renders(
         socket.send.assert_not_awaited()
         socket.close.assert_awaited_once()
         assert worker._render_journal.get(job["id"]) is None
+    finally:
+        await worker.comfy.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("core_state", ["held", "closed", "unknown"])
+@respx.mock
+async def test_expired_native_completion_still_requires_current_core_hold(
+    monkeypatch, tmp_path, core_state
+):
+    monkeypatch.setattr(Settings, "COMFYUI_URL", ORIGIN)
+    monkeypatch.setattr(Settings, "GRID_API_KEY", "synthetic-noncredential")
+    monkeypatch.setattr(Settings, "GRID_COMFYUI_STATE_DIR", str(tmp_path / "expired-state"))
+    monkeypatch.setattr(Settings, "GRID_WORKER_KEY_PATH", str(tmp_path / "absent-key"))
+    build = AsyncMock()
+    monkeypatch.setattr(ws_module, "build_workflow", build)
+    monkeypatch.setattr(WSWorker, "_relay_progress", AsyncMock())
+    job = {
+        "id": str(uuid4()), "resume": True, "model": "ltx-test", "job_type": "video",
+        "payload": {
+            "_grid_media_job_version": 1, "n": 1, "seed": 7, "seeds": [7],
+            "recipe_engine": "comfyui", "recipe_spec": copy.deepcopy(GRAPH),
+        },
+        "upload": [{
+            "put_url": "https://storage.example/recovered", "key": "recovered",
+            "content_type": "video/mp4",
+        }],
+    }
+    worker, socket = WSWorker(), AsyncMock()
+    worker._grid_worker_id = str(uuid4())
+    journal = await worker._video_journal()
+    binding = digest({"job_type": "video", "model": job["model"], "payload": job["payload"]})
+    row = journal.begin(job["id"], binding)
+    journal.arm(row.job_id, digest(GRAPH))
+    journal.running(row.job_id)
+    row = journal.require(row.job_id)
+    created = time.time() - 1000
+    with sqlite3.connect(journal.path) as database:
+        database.execute("UPDATE renders SET created=?", (created,))
+    confirmation = AsyncMock(return_value={row.job_id: core_state})
+    monkeypatch.setattr(ws_module, "fetch_states", confirmation)
+    observed = respx.get(ORIGIN + f"/history/{row.prompt_id}").mock(
+        return_value=httpx.Response(200, json=history(row))
+    )
+    download = respx.get(ORIGIN + "/view").mock(
+        return_value=httpx.Response(200, content=VIDEO)
+    )
+    uploaded = respx.put("https://storage.example/recovered").mock(
+        return_value=httpx.Response(200)
+    )
+    try:
+        if core_state == "held":
+            await worker._handle_job(socket, job)
+            assert json.loads(socket.send.await_args.args[0])["type"] == "done"
+            assert observed.call_count == download.call_count == uploaded.call_count == 1
+        else:
+            with pytest.raises(RenderUncertain, match="recovery"):
+                await worker._handle_job(socket, job)
+            socket.send.assert_not_awaited()
+            socket.close.assert_awaited_once()
+            assert observed.call_count == download.call_count == uploaded.call_count == 0
+        assert journal.require(row.job_id).created == created
+        confirmation.assert_awaited_once()
+        build.assert_not_awaited()
+        assert not any(call.request.method == "POST" for call in respx.calls)
     finally:
         await worker.comfy.aclose()
 

@@ -21,6 +21,11 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   POST. ComfyUI accepts that ID but does not deduplicate submissions. Unknown
   acceptance can only observe the saved ID; never POST again or interrupt
   a shared runtime. Recover cached bytes before upload/DONE retries.
+  After the observation deadline, an already-armed identity may perform one
+  bounded history read and recover only its verified completed output. Missing,
+  incomplete, conflicting or unavailable history stays uncertain without more
+  polling. Expired prepared work cannot build or submit. Creation times are
+  never extended; current Core-held authorization still gates all delivery.
   `render_retention.py` owns the bounded rig-bound Core terminal-state client;
   it is not financial authority or local-time expiry.
 - **Mapping:** `model_mapper.py` — grid model name → workflow filename (`DEFAULT_WORKFLOW_MAP`
