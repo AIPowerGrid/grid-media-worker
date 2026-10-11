@@ -56,7 +56,43 @@ def inventories():
             ("UnionLoader", ["union.safetensors"]),
         )
     }
+    info["UnionLoader"]["input"]["required"]["file"] = [
+        "COMBO",
+        {"multiselect": False, "options": ["union.safetensors"]},
+    ]
     return {"model": MODEL, "recipes": [record]}, info
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        [["video.safetensors"]],
+        ["COMBO", {"options": ["video.safetensors"], "multiselect": False}],
+    ],
+)
+def test_legacy_and_v3_loader_choices(definition):
+    startup._require_files(
+        {"node_types": ["ModelLoader"], "model_files": ["video.safetensors"]},
+        {"ModelLoader": {"input": {"required": {"file": definition}}}},
+    )
+
+
+@pytest.mark.parametrize(
+    "definition",
+    [
+        ["COMBO"],
+        ["COMBO", {}],
+        ["COMBO", {"options": "video.safetensors"}],
+        ["COMBO", {"options": []}],
+        ["STRING", {"default": "video.safetensors"}],
+    ],
+)
+def test_missing_or_non_combo_choices_cannot_supply_a_weight(definition):
+    with pytest.raises(startup.VideoStartupError, match="weight"):
+        startup._require_files(
+            {"node_types": ["ModelLoader"], "model_files": ["video.safetensors"]},
+            {"ModelLoader": {"input": {"required": {"file": definition}}}},
+        )
 
 
 def options(tmp_path, **overrides):

@@ -13,6 +13,8 @@ and the WebSocket worker.
   reach Core only; no redirects, ambient proxies or unpaid render. Flags/private
   state alone, signed-profile overrides and blind trust cannot declare support.
   Mocked inventories do not establish model fidelity or public qualification.
+  Loader tests cover legacy list choices and ComfyUI V3 `COMBO.options`; missing
+  options or a string default must not substitute for an installed weight.
 - `test_operator_rough_edges.py` - cold-start inventory/discovery, portable
   port-conflict diagnostics, install-relative defaults, advertised status, and
   advisory price-book aliases/fetch failures.

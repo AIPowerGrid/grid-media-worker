@@ -52,7 +52,7 @@ def _require_files(requirements: dict, inventory: dict) -> None:
     files = _strings(requirements.get("model_files"), limit=32)
     if nodes - inventory.keys():
         raise VideoStartupError("A governed video node is missing from ComfyUI")
-    # Check only referenced loader classes; unrelated nodes cannot satisfy a weight.
+    # Check only recipe classes; unrelated nodes cannot satisfy a weight.
     available = set()
     for name in nodes:
         definition = inventory[name]
@@ -63,8 +63,18 @@ def _require_files(requirements: dict, inventory: dict) -> None:
             if not isinstance(inputs, dict):
                 raise VideoStartupError("Invalid local video node inputs")
             for value in inputs.values():
-                if isinstance(value, list) and value and isinstance(value[0], list):
-                    available.update(item for item in value[0] if isinstance(item, str))
+                if not isinstance(value, list) or not value:
+                    continue
+                choices = value[0]
+                # ComfyUI V3 uses COMBO metadata instead of a first-item choice list.
+                if (
+                    choices == "COMBO"
+                    and len(value) >= 2
+                    and isinstance(value[1], dict)
+                ):
+                    choices = value[1].get("options")
+                if isinstance(choices, list):
+                    available.update(item for item in choices if isinstance(item, str))
     if files - available:
         raise VideoStartupError("A governed video weight is missing from ComfyUI")
 
