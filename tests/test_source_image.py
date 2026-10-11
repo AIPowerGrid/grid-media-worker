@@ -38,3 +38,25 @@ async def test_source_image_download_is_bounded(monkeypatch):
         await workflow.download_image(
             "https://media.example/large.png", "source.png"
         )
+
+
+@pytest.mark.asyncio
+@respx.mock
+async def test_source_image_returns_actual_backend_name_after_collision(monkeypatch):
+    monkeypatch.setattr(workflow.Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+    respx.get("https://media.example/source.png").mock(return_value=httpx.Response(200, content=b"small-png"))
+    respx.post("http://127.0.0.1:8188/upload/image").mock(return_value=httpx.Response(200, json={"name": "source (1).png"}))
+    assert await workflow.download_image("https://media.example/source.png", "source.png") == "source (1).png"
+
+
+@pytest.mark.asyncio
+@respx.mock
+@pytest.mark.parametrize("identity", [{}, {"name": "../outside.png"}, {"name": "a/b.png"},
+                                    {"name": "source.png", "subfolder": "unexpected"},
+                                    {"name": "source.png", "type": "output"}])
+async def test_source_upload_identity_rejects_unsafe_paths(monkeypatch, identity):
+    monkeypatch.setattr(workflow.Settings, "COMFYUI_URL", "http://127.0.0.1:8188")
+    respx.get("https://media.example/source.png").mock(return_value=httpx.Response(200, content=b"small-png"))
+    respx.post("http://127.0.0.1:8188/upload/image").mock(return_value=httpx.Response(200, json=identity))
+    with pytest.raises(RuntimeError, match="invalid source image identity"):
+        await workflow.download_image("https://media.example/source.png", "source.png")
