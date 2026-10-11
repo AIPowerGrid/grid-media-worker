@@ -18,6 +18,10 @@ and the WebSocket worker.
   POSIX state/HTTP startup cases run only on POSIX hosts. Schema parsing,
   configuration bypasses and explicit non-POSIX rejection remain covered on
   Windows; a skip never grants Windows video capability or ACL qualification.
+  Transient read/network/deadline tests require bounded full-check retries with
+  credentials confined to Core and no render or early capability. Bad inventory
+  still rejects after transient recovery; cancellation cannot retry. These
+  synthetic faults do not explain or reproduce every native startup timeout.
 - `test_operator_rough_edges.py` - cold-start inventory/discovery, portable
   port-conflict diagnostics, install-relative defaults, advertised status, and
   advisory price-book aliases/fetch failures.

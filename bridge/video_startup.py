@@ -5,6 +5,7 @@
 
 import asyncio
 import json
+import logging
 import os
 import re
 from urllib.parse import quote, urlsplit
@@ -18,6 +19,9 @@ MODELS = {"LTX-2.5 Distilled BF16": "distilled", "LTX-2.5 Dev BF16": "dev"}
 MAX_RECIPE_BYTES = 512 * 1024
 MAX_INVENTORY_BYTES = 16 * 1024 * 1024
 STARTUP_DEADLINE_SECONDS = 30
+STARTUP_MAX_ATTEMPTS = 3
+STARTUP_RETRY_SECONDS = 2
+logger = logging.getLogger(__name__)
 
 
 class VideoStartupError(RuntimeError):
@@ -203,7 +207,18 @@ async def qualify_video_startup(
                     raise VideoStartupError("Invalid local ComfyUI inventory")
                 _verify_recipes(records, inventory, models[0], source_modes)
 
-        await asyncio.wait_for(read(), timeout=STARTUP_DEADLINE_SECONDS)
+        for attempt in range(STARTUP_MAX_ATTEMPTS):
+            try:
+                await asyncio.wait_for(read(), timeout=STARTUP_DEADLINE_SECONDS)
+                break
+            except (httpx.TimeoutException, httpx.NetworkError, asyncio.TimeoutError):
+                if attempt + 1 == STARTUP_MAX_ATTEMPTS:
+                    raise
+                logger.warning(
+                    "Governed video startup read unavailable; retrying verification (%s/%s)",
+                    attempt + 2, STARTUP_MAX_ATTEMPTS,
+                )
+                await asyncio.sleep(STARTUP_RETRY_SECONDS)
     except (
         httpx.HTTPError,
         ValueError,

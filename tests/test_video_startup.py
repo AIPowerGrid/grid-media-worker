@@ -285,8 +285,13 @@ async def test_bounded_inventory_failures(tmp_path, inventories, monkeypatch, fa
         monkeypatch.setattr(startup, "MAX_RECIPE_BYTES", 10)
     if failure == "deadline":
         monkeypatch.setattr(startup, "STARTUP_DEADLINE_SECONDS", 0.01)
+        monkeypatch.setattr(startup, "STARTUP_RETRY_SECONDS", 0)
+
+    attempts = 0
 
     async def late(request):
+        nonlocal attempts
+        attempts += 1
         await asyncio.sleep(0.05)
         return httpx.Response(200, json=records)
 
@@ -305,8 +310,106 @@ async def test_bounded_inventory_failures(tmp_path, inventories, monkeypatch, fa
         local = routes.get(COMFY + "/object_info").respond(200, json=info)
         with pytest.raises(startup.VideoStartupError):
             await startup.qualify_video_startup(**options(tmp_path))
-        assert len(routes.calls) <= 1
+        assert len(routes.calls) <= (startup.STARTUP_MAX_ATTEMPTS if failure == "deadline" else 1)
         assert not local.called
+        if failure == "deadline":
+            assert attempts == startup.STARTUP_MAX_ATTEMPTS
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
+@pytest.mark.parametrize("failure", ["read-timeout", "network", "deadline"])
+async def test_transient_inventory_read_retries_entire_check_without_credentials_leaking(
+    tmp_path, inventories, monkeypatch, failure, caplog
+):
+    records, info = inventories
+    monkeypatch.setattr(startup, "STARTUP_RETRY_SECONDS", 0)
+    if failure == "deadline":
+        monkeypatch.setattr(startup, "STARTUP_DEADLINE_SECONDS", 0.01)
+    attempts = 0
+
+    async def inventory(request):
+        nonlocal attempts
+        attempts += 1
+        assert "apikey" not in request.headers
+        assert "authorization" not in request.headers
+        if attempts == 1:
+            if failure == "deadline":
+                await asyncio.sleep(0.05)
+            elif failure == "network":
+                raise httpx.ConnectError("synthetic transport loss", request=request)
+            else:
+                raise httpx.ReadTimeout("synthetic timeout", request=request)
+        return httpx.Response(200, json=info)
+
+    with respx.mock() as routes:
+        recipe = routes.get(RECIPE_URL).respond(200, json=records)
+        routes.get(COMFY + "/object_info").mock(side_effect=inventory)
+        assert await startup.qualify_video_startup(**options(tmp_path)) == (
+            "async-video-resume-v1", "recipe-media-sources-v1",
+        )
+        assert attempts == 2 and recipe.call_count == 2
+        assert all(call.request.method == "GET" for call in routes.calls)
+        assert all(call.request.headers["apikey"] == "synthetic-worker-key"
+                   for call in recipe.calls)
+    assert "synthetic-worker-key" not in caplog.text
+    assert "synthetic timeout" not in caplog.text
+    assert not (tmp_path / "private-state" / "renders.sqlite3").exists()
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
+async def test_transient_recovery_cannot_bypass_an_invalid_inventory(tmp_path, inventories, monkeypatch):
+    records, info = inventories
+    del info["UnionLoader"]
+    monkeypatch.setattr(startup, "STARTUP_RETRY_SECONDS", 0)
+    with respx.mock() as routes:
+        recipe = routes.get(RECIPE_URL).respond(200, json=records)
+        local = routes.get(COMFY + "/object_info").mock(side_effect=[
+            httpx.ReadTimeout("synthetic timeout"), httpx.Response(200, json=info),
+        ])
+        with pytest.raises(startup.VideoStartupError, match="node"):
+            await startup.qualify_video_startup(**options(tmp_path))
+        assert recipe.call_count == 2 and local.call_count == 2
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
+@pytest.mark.parametrize("target", ["core", "comfy"])
+async def test_transport_retry_exhaustion_cannot_advertise(tmp_path, inventories, monkeypatch, target):
+    records, _ = inventories
+    monkeypatch.setattr(startup, "STARTUP_RETRY_SECONDS", 0)
+    with respx.mock(assert_all_called=False) as routes:
+        recipe = routes.get(RECIPE_URL).respond(200, json=records)
+        local = routes.get(COMFY + "/object_info")
+        failed = recipe if target == "core" else local
+        failed.mock(side_effect=httpx.ReadTimeout("synthetic timeout"))
+        with pytest.raises(startup.VideoStartupError):
+            await startup.qualify_video_startup(**options(tmp_path))
+        assert failed.call_count == startup.STARTUP_MAX_ATTEMPTS
+        assert recipe.call_count == startup.STARTUP_MAX_ATTEMPTS
+        assert local.call_count == (0 if target == "core" else startup.STARTUP_MAX_ATTEMPTS)
+    assert not (tmp_path / "private-state" / "renders.sqlite3").exists()
+
+
+@pytest.mark.asyncio
+@POSIX_ONLY
+async def test_startup_cancellation_never_retries(tmp_path, inventories, monkeypatch):
+    records, _ = inventories
+    monkeypatch.setattr(startup, "STARTUP_RETRY_SECONDS", 0)
+    attempts = 0
+
+    async def cancelled(request):
+        nonlocal attempts
+        attempts += 1
+        raise asyncio.CancelledError()
+
+    with respx.mock(assert_all_called=False) as routes:
+        recipe = routes.get(RECIPE_URL).respond(200, json=records)
+        local = routes.get(COMFY + "/object_info").mock(side_effect=cancelled)
+        with pytest.raises(asyncio.CancelledError):
+            await startup.qualify_video_startup(**options(tmp_path))
+        assert recipe.call_count == 1 and attempts == 1
 
 
 @pytest.fixture

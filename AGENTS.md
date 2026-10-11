@@ -123,6 +123,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   cannot advertise `async-video-resume-v1`. Opt-in POSIX startup requires one
   explicit governed LTX model, video-only jobs, a healthy loopback runtime and
   authenticated Core inventory. Signed-profile/blind-trust overrides reject.
+  Transient startup reads have a bounded retry; every attempt rechecks the full
+  inventory before advertising. Authentication/schema/state failures do not retry.
   `GRID_VIDEO_SOURCE_MODES` defaults empty; Core's shared source feature requires
   all governed modes, not an audio-only or video-only subset. Core's separate
   candidate implements original-worker leased reconnect authorization; joint

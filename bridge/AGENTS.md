@@ -54,6 +54,11 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   or ambient proxies. Check every returned contract, node and referenced file.
   Core's shared source feature requires the full governed source-mode set;
   partial support must not advertise it. Never submit an unpaid smoke render.
+  Retry only transport/network timeouts, at most three complete 30-second
+  read-only checks with two seconds between attempts. Re-fetch and verify Core
+  recipes and ComfyUI inventory each time; no partial result authorizes support.
+  Invalid status/auth/schema, missing nodes/weights and unsafe state fail without
+  retry. Cancellation propagates. Retry logs contain no URL, key or raw error.
 - **Detection/UI:** `comfyui_detect.py` (find/install ComfyUI for the wizard); `web/` — control
   UI and local capability inventory, owned in its own AGENTS.md. Inventory is descriptive;
   runtime gates remain authoritative for qualification and advertisement.
