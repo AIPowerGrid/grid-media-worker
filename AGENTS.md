@@ -87,6 +87,8 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   supported Python version and audits the complete locked default, test, and
   release dependency set. CI must not fall back to an ad hoc pip install when
   package metadata or the lock is broken.
+  Retain the reviewed multidict 6.9.1 security floor; dependency edits require
+  a frozen-lock install, full tests and a complete locked dependency audit.
 
 ## Local Contracts
 
@@ -97,9 +99,21 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   presigned R2 uploads. The retired polling client is not shipped.
 - **Recipe-executor dispatch (primary):** the grid resolves a job's `recipe_spec` server-side
   and pushes the graph; `bridge/workflow.py:build_recipe_workflow` runs that core-resolved spec
-  directly (binding only supplied source images into declared slots). This is the forward
+  directly (binding supplied sources only into declared slots). This is the forward
   dispatch mode — "add a recipe in core → it runs here" — preferred over local model→workflow
   mapping.
+- **Source audio/video remains a private candidate:** `bridge/source_media.py`
+  binds Core-issued exact-role, byte/hash/timing commitments into governed
+  `LoadAudio`/`LoadVideo` slots. Downloads use HTTPS R2 without Grid credentials
+  or redirects, then upload to loopback ComfyUI with collision-safe names.
+  Default/released workers do not advertise `recipe-media-sources-v1`. The
+  explicit candidate startup described below can declare it only after every
+  governed source mode's node/file inventory checks. Native joint
+  transport, source privacy/retention and paid lifecycle evidence remain gates.
+  The separate Ingredients candidate also binds an exact committed appearance
+  PNG, never an opening image. Its new `recipe-appearance-reference-v1` feature
+  requires explicit model/profile and complete source inventory qualification;
+  defaults, signed profiles and blind trust cannot implicitly enable it.
 - **Advertise only what you can serve:** a model is advertised only when its workflow file is
   resolvable and every referenced weight is present in ComfyUI. With `WORKFLOW_FILE` set,
   models are derived from the checkpoint files in those graphs via the local model reference;
@@ -107,6 +121,23 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   never promotes it to qualification or advertisement.
 - **No standing storage creds on the worker.** Outputs upload only to
   Grid-issued presigned URLs from the job message.
+- **Durable async video remains a candidate:** `bridge/render_journal.py`
+  persists a single governed video's ComfyUI identity and bounded MP4 cache
+  before upload. `GRID_ASYNC_VIDEO` defaults off; a private directory alone
+  cannot advertise `async-video-resume-v1`. Opt-in POSIX startup requires one
+  explicit governed LTX model, video-only jobs, a healthy loopback runtime and
+  authenticated Core inventory. Signed-profile/blind-trust overrides reject.
+  The distinct NVFP4 candidate requires its exact official backbone plus
+  separate BF16 encoder/VAEs in every selected Core inventory. BF16 substitution
+  rejects; this does not grant native source qualification or public admission.
+  Transient startup reads have a bounded retry; every attempt rechecks the full
+  inventory before advertising. Authentication/schema/state failures do not retry.
+  Read only the recipe's required ComfyUI nodes, not every unrelated plugin.
+  `GRID_VIDEO_SOURCE_MODES` defaults empty; Core's shared source feature requires
+  all governed modes, not an audio-only or video-only subset. Core's separate
+  candidate implements original-worker leased reconnect authorization; joint
+  native-worker/GPU/storage recovery, retention and paid canaries must pass
+  before public async admission. Local state cannot authorize a charge or payout.
 - **All config is env-driven** through `bridge/config.py` (`Settings`); the UI persists changes
   to `.env`. `GRID_API_KEY` is required.
 - **Worker profiles are fail-closed:** `bridge/profiles/` validates signed,
