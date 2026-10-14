@@ -87,6 +87,64 @@ def appearance_inventories(inventories):
     return records, inventory
 
 
+@pytest.fixture
+def nvfp4_inventories(inventories):
+    records, inventory = copy.deepcopy(inventories)
+    records["model"] = startup.NVFP4_MODEL
+    record = records["recipes"][0]
+    for required in (record, *record["source_requirements"].values()):
+        required["model_files"] = sorted(startup.NVFP4_FILES) + (
+            ["union.safetensors"] if "UnionLoader" in required["node_types"] else []
+        )
+    inventory["ModelLoader"]["input"]["required"]["file"] = [sorted(startup.NVFP4_FILES)]
+    return records, inventory
+
+
+@pytest.mark.parametrize("modes", [[], ["audio", "video"]])
+def test_nvfp4_requires_its_own_components_in_all_selected_recipes(nvfp4_inventories, modes):
+    records, inventory = nvfp4_inventories
+    required = startup._recipe_requirements(records, startup.NVFP4_MODEL, modes)
+    for item in required:
+        startup._require_files(item, inventory)
+    inventory["ModelLoader"]["input"]["required"]["file"] = [[
+        "ltx-2.5-22b-distilled-transformer-bf16.safetensors",
+        *sorted(startup.NVFP4_FILES - {"ltx-2.5-22b-distilled-transformer-nvfp4.safetensors"}),
+    ]]
+    with pytest.raises(startup.VideoStartupError, match="weight"):
+        startup._require_files(required[0], inventory)
+
+
+@pytest.mark.parametrize("role", [None, "audio", "video"])
+@pytest.mark.parametrize("wrong_backbone", [False, True])
+def test_nvfp4_cannot_accept_incomplete_or_bf16_core_inventory(nvfp4_inventories, role, wrong_backbone):
+    records, _ = nvfp4_inventories
+    record = records["recipes"][0]
+    required = record if role is None else record["source_requirements"][role]
+    required["model_files"].remove("ltx-2.5-22b-distilled-transformer-nvfp4.safetensors")
+    if wrong_backbone:
+        required["model_files"].append("ltx-2.5-22b-distilled-transformer-bf16.safetensors")
+    with pytest.raises(startup.VideoStartupError, match="NVFP4"):
+        startup._recipe_requirements(records, startup.NVFP4_MODEL, ["audio", "video"])
+
+
+@POSIX_ONLY
+@pytest.mark.asyncio
+@respx.mock
+async def test_nvfp4_startup_is_read_only_and_identity_bound(tmp_path, nvfp4_inventories):
+    records, inventory = nvfp4_inventories
+    url = f"{CORE}/v1/models/{quote(startup.NVFP4_MODEL, safe='')}/recipe"
+    recipe = respx.get(url).mock(return_value=httpx.Response(200, json=records))
+    for name, value in inventory.items():
+        respx.get(f"{COMFY}/object_info/{name}").mock(return_value=httpx.Response(200, json={name: value}))
+    features = await startup.qualify_video_startup(
+        **options(tmp_path, models=[startup.NVFP4_MODEL]),
+    )
+    assert features == ("async-video-resume-v1", "recipe-media-sources-v1")
+    assert all(call.request.method == "GET" for call in respx.calls)
+    assert recipe.calls[0].request.headers["apikey"] == "synthetic-worker-key"
+    assert all("apikey" not in call.request.headers for call in respx.calls if call.request.url.host != "grid.test")
+
+
 @pytest.mark.parametrize("modes", [[], ["audio"], ["video"]])
 def test_ingredients_startup_requires_all_sources_not_just_private_state(appearance_inventories, modes):
     records, _inventory = appearance_inventories

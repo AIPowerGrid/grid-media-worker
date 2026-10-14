@@ -127,6 +127,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   cannot advertise `async-video-resume-v1`. Opt-in POSIX startup requires one
   explicit governed LTX model, video-only jobs, a healthy loopback runtime and
   authenticated Core inventory. Signed-profile/blind-trust overrides reject.
+  The distinct NVFP4 candidate requires its exact official backbone plus
+  separate BF16 encoder/VAEs in every selected Core inventory. BF16 substitution
+  rejects; this does not grant native source qualification or public admission.
   Transient startup reads have a bounded retry; every attempt rechecks the full
   inventory before advertising. Authentication/schema/state failures do not retry.
   Read only the recipe's required ComfyUI nodes, not every unrelated plugin.

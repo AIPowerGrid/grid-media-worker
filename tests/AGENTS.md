@@ -15,6 +15,9 @@ and the WebSocket worker.
   Mocked inventories do not establish model fidelity or public qualification.
   Loader tests cover legacy list choices and ComfyUI V3 `COMBO.options`; missing
   options or a string default must not substitute for an installed weight.
+  Distinct NVFP4 cases require all four actual component filenames in every
+  selected recipe/source inventory; BF16 substitution and missing local NVFP4
+  reject. The read-only HTTP path retains credential separation and defaults.
   POSIX state/HTTP startup cases run only on POSIX hosts. Schema parsing,
   configuration bypasses and explicit non-POSIX rejection remain covered on
   Windows; a skip never grants Windows video capability or ACL qualification.

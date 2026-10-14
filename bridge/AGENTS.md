@@ -57,7 +57,7 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   nodes reject before any fetch. No graph injection or role downgrade.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
 - **Video startup:** `video_startup.py` - default-off governed video compatibility
-  check. Require one explicit LTX BF16 model and video-only jobs, private POSIX
+  check. Require one explicit governed LTX model and video-only jobs, private POSIX
   state and the actual loopback ComfyUI origin. Read authenticated Core recipes
   and credential-free ComfyUI inventory under size/time limits without redirects
   or ambient proxies. Check every returned contract, node and referenced file.
@@ -67,6 +67,11 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   `ingredients-dev-v1` capacity, both modes, Ingredients weights and advanced
   motion nodes before declaring `recipe-appearance-reference-v1`. Standard Dev
   and released/default workers do not acquire that capability.
+  Explicit `LTX-2.5 Distilled NVFP4` startup additionally requires the official
+  NVFP4 backbone and separate BF16 encoder/VAEs in every selected Core recipe/
+  source inventory. A missing component or BF16 backbone substitution rejects
+  before local reads or capability advertisement. This is protocol inventory,
+  not native source/capacity, purchased billing or promotion authority.
   Validate Core's contracts before fetching only their required node classes
   through `/object_info/{node_class}`. Never invoke the full plugin inventory;
   unrelated handlers must not gate video startup. Bound the combined response

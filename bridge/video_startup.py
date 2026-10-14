@@ -16,7 +16,14 @@ from .render_journal import RenderUncertain, prepare_state_directory
 from .render_retention import status_url
 
 APPEARANCE_MODEL = "LTX-2.5 Dev BF16 Ingredients"
-MODELS = {"LTX-2.5 Distilled BF16": "distilled", "LTX-2.5 Dev BF16": "dev", APPEARANCE_MODEL: "dev"}
+NVFP4_MODEL = "LTX-2.5 Distilled NVFP4"
+NVFP4_FILES = frozenset({
+    "ltx-2.5-22b-distilled-transformer-nvfp4.safetensors",
+    "gemma4-12b-with-proj-ltx-2.5-bf16.safetensors",
+    "ltx-2.5-video-vae-bf16.safetensors",
+    "ltx-2.5-audio-vae-bf16.safetensors",
+})
+MODELS = {"LTX-2.5 Distilled BF16": "distilled", NVFP4_MODEL: "distilled", "LTX-2.5 Dev BF16": "dev", APPEARANCE_MODEL: "dev"}
 MAX_RECIPE_BYTES = 512 * 1024
 MAX_INVENTORY_BYTES = 16 * 1024 * 1024
 STARTUP_DEADLINE_SECONDS = 30
@@ -155,7 +162,12 @@ def _recipe_requirements(value: dict, model: str, modes: list[str]) -> list[dict
                     raise VideoStartupError("Core lacks the governed Ingredients node and weight inventory")
     for required in requirements:
         _strings(required.get("node_types"), limit=128)
-        _strings(required.get("model_files"), limit=32)
+        files = _strings(required.get("model_files"), limit=32)
+        if model == NVFP4_MODEL and (
+            not NVFP4_FILES <= files
+            or "ltx-2.5-22b-distilled-transformer-bf16.safetensors" in files
+        ):
+            raise VideoStartupError("Core lacks the exact governed NVFP4 component inventory")
     return requirements
 
 
