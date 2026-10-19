@@ -24,6 +24,31 @@ def payload():
                               "sample_rate": 48_000, "samples": 18_000, "channels": 2}]}
 
 
+@pytest.mark.parametrize("frames", [337, 345, 481, 625])
+@pytest.mark.parametrize("video", [False, True])
+def test_long_sources_require_the_explicit_extended_protocol(frames, video):
+    body = payload()
+    body["frames"] = frames
+    body["source_media"][0].update(frames=frames, samples=frames * 2000)
+    if video:
+        body["recipe_spec"]["motion"] = {"class_type": "LoadVideo", "inputs": {"file": "unbound.mp4"}}
+        body["recipe_source_bindings"].append({"role": "reference_video", "path": "motion.inputs.file"})
+        body["source_media"].append({"role": "reference_video", "url": URL.replace(".wav", ".mp4"),
+                                     "sha256": "a" * 64, "bytes": 10, "content_type": "video/mp4",
+                                     "frames": frames, "fps": 24, "width": 256, "height": 256})
+    if frames > 337:
+        with pytest.raises(RuntimeError, match="binding contract"):
+            source_media.validate_bindings(body["recipe_spec"], body)
+        body["required_media_features"] = source_media.LONG_SOURCE_FEATURE
+        with pytest.raises(RuntimeError, match="binding contract"):
+            source_media.validate_bindings(body["recipe_spec"], body)
+    body["required_media_features"] = [source_media.LONG_SOURCE_FEATURE]
+    assert len(source_media.validate_bindings(body["recipe_spec"], body)) == 1 + int(video)
+    body["frames"] = 633
+    with pytest.raises(RuntimeError, match="binding contract"):
+        source_media.validate_bindings(body["recipe_spec"], body)
+
+
 @pytest.mark.asyncio
 async def test_recipe_binds_actual_audio_upload_name_without_changing_core_graph(monkeypatch):
     body = payload()

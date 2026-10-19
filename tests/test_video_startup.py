@@ -250,7 +250,7 @@ def mock_inventory(routes, info):
     "modes,expected",
     [
         ([], ("async-video-resume-v1",)),
-        (["audio", "video"], ("async-video-resume-v1", "recipe-media-sources-v1")),
+        (["audio", "video"], ("async-video-resume-v1", "recipe-media-sources-v1", "recipe-media-sources-625-v1")),
     ],
 )
 async def test_read_only_startup_checks_exact_model_and_separates_credentials(
@@ -536,7 +536,7 @@ async def test_transient_inventory_read_retries_entire_check_without_credentials
         recipe = routes.get(RECIPE_URL).respond(200, json=records)
         mock_inventory(routes, info).mock(side_effect=inventory)
         assert await startup.qualify_video_startup(**options(tmp_path)) == (
-            "async-video-resume-v1", "recipe-media-sources-v1",
+            "async-video-resume-v1", "recipe-media-sources-v1", "recipe-media-sources-625-v1",
         )
         assert attempts == 1 + len(info) and recipe.call_count == 2
         assert all(call.request.method == "GET" for call in routes.calls)
@@ -665,6 +665,7 @@ async def test_normal_run_advertises_only_after_verified_startup(
             "recipe-image-bindings-v1",
             "async-video-resume-v1",
             "recipe-media-sources-v1",
+            "recipe-media-sources-625-v1",
         ]
         health.assert_awaited_once()
     finally:

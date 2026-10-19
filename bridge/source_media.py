@@ -17,6 +17,7 @@ LIMITS = {"reference_audio": (12 * 1024 * 1024, "audio/wav", "wav", "LoadAudio",
           "reference_video": (32 * 1024 * 1024, "video/mp4", "mp4", "LoadVideo", "file"),
           "reference_image": (12 * 1024 * 1024, "image/png", "png", "LoadImage", "image")}
 R2_HOST = re.compile(r"[0-9a-f]{32}(?:\.(?:eu|fedramp))?\.r2\.cloudflarestorage\.com")
+LONG_SOURCE_FEATURE = "recipe-media-sources-625-v1"
 
 
 def validate_bindings(workflow: dict, payload: dict) -> list[tuple[dict, dict]]:
@@ -38,8 +39,11 @@ def validate_bindings(workflow: dict, payload: dict) -> list[tuple[dict, dict]]:
                 or any(isinstance(node, dict) and node.get("class_type") == "LoadImage" and name != "reference_image"
                        for name, node in workflow.items())):
             raise ValueError
-        if (type(payload.get("frames")) is not int or not 9 <= payload["frames"] <= 337
+        if (type(payload.get("frames")) is not int or not 9 <= payload["frames"] <= 625
                 or payload["frames"] % 8 != 1 or type(payload.get("fps")) is not int):
+            raise ValueError
+        features = payload.get("required_media_features")
+        if payload["frames"] > 337 and (not isinstance(features, list) or LONG_SOURCE_FEATURE not in features):
             raise ValueError
         expected = {name for name, node in workflow.items()
                     if isinstance(node, dict) and node.get("class_type") in {"LoadAudio", "LoadVideo"}}

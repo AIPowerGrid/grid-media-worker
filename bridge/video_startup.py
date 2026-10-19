@@ -14,6 +14,7 @@ import httpx
 
 from .render_journal import RenderUncertain, prepare_state_directory
 from .render_retention import status_url
+from .source_media import LONG_SOURCE_FEATURE
 
 APPEARANCE_MODEL = "LTX-2.5 Dev BF16 Ingredients"
 NVFP4_MODEL = "LTX-2.5 Distilled NVFP4"
@@ -290,4 +291,5 @@ async def qualify_video_startup(
         ) from exc
     return ("async-video-resume-v1",) + (
         ("recipe-media-sources-v1",) if source_modes else ()
-    ) + (("recipe-appearance-reference-v1",) if models == [APPEARANCE_MODEL] else ())
+    ) + ((LONG_SOURCE_FEATURE,) if source_modes and models == ["LTX-2.5 Distilled BF16"] else ()) + (
+        ("recipe-appearance-reference-v1",) if models == [APPEARANCE_MODEL] else ())

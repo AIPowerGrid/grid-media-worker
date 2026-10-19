@@ -103,6 +103,11 @@ an older Core fails closed instead of advertising unsupported video.
 
 For distilled audio/video conditioning, `GRID_VIDEO_SOURCE_MODES=audio,video`
 checks every source node/weight before adding `recipe-media-sources-v1`.
+Updated Distilled BF16 workers also declare `recipe-media-sources-625-v1`
+for source clips through625frames (26.04seconds). Core must require that
+additional feature above337frames so older source workers are not selected.
+NVFP4 and Ingredients do not declare the extended feature. Inventory alone
+does not qualify GPU capacity; run native source controls before promotion.
 The current Core feature covers both modes, so a partial list rejects rather
 than falsely declaring support. Leave it empty for source-free jobs; standard
 dev has no governed source modes. The separate dark `LTX-2.5 Dev BF16 Ingredients`
