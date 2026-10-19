@@ -97,6 +97,11 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 - **One transport:** `bridge/ws_worker.py` opens a persistent WebSocket to
   `/v1/workers/ws` (derived from `GRID_API_URL`) for push dispatch and
   presigned R2 uploads. The retired polling client is not shipped.
+- Distilled BF16 source clips through625frames require the additive
+  `recipe-media-sources-625-v1` feature on one compatible worker. Old source
+  workers remain eligible for337-frame work only. Default workers, NVFP4 and
+  Ingredients do not gain this capability. Native capacity and billing proof
+  remain separate from the parser and startup inventory.
 - **Recipe-executor dispatch (primary):** the grid resolves a job's `recipe_spec` server-side
   and pushes the graph; `bridge/workflow.py:build_recipe_workflow` runs that core-resolved spec
   directly (binding supplied sources only into declared slots). This is the forward

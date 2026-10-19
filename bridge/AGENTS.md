@@ -47,6 +47,10 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   without redirects, proxies or Grid credentials; verify all bytes before a
   loopback ComfyUI upload and bind its actual collision-renamed input filename.
   Bound each transfer to 60 seconds and 12/32 MiB audio/video respectively.
+  The shared source parser accepts at most625frames. Above337frames, require
+  `recipe-media-sources-625-v1` in the Core-frozen feature list before any fetch.
+  Only opted-in Distilled BF16 startup declares that additional capability;
+  NVFP4, standard Dev and fixed Ingredients profiles are not widened.
   Malformed/missing/unbound sources fail; never silently downgrade to T2V/I2V.
   Default workers do not advertise `recipe-media-sources-v1`. Candidate opt-in
   startup must validate all governed source inventories before declaring it;
