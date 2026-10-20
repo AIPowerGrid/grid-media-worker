@@ -7,6 +7,12 @@ and the WebSocket worker.
 
 ## Ownership
 
+- `test_dependency_security.py` verifies installed Pillow/certifi floors,
+  bounded rejected-GIF canvas state, usable CA validation and the exact patched
+  uv tool when release dependencies are installed. These tests do not qualify
+  every decoder input or external TLS endpoint. Complete locked dependency
+  audit and Linux/Windows executable packaging remain separate CI gates.
+
 - `test_video_startup.py` - normal-run capability gating, exact Core model/root/
   contract, complete shared source modes, missing nodes/files, private POSIX
   state, loopback/TLS origin rules and bounded read-only HTTP. Worker keys must

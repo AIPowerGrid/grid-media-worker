@@ -16,8 +16,13 @@ through short-lived, presigned URLs. Workers never receive Grid storage keys.
 
 ## ComfyUI Worker
 
-Requirements: Python 3.10+, a running ComfyUI instance, and a Grid API key from
+Requirements: Python 3.11+ (3.12 recommended), a running ComfyUI instance, and
+a Grid API key from
 [the developer console](https://console.aipowergrid.io/dashboard/api-key).
+
+Python 3.10 is no longer supported because patched Pillow requires 3.11+.
+Create a new worker environment with a supported Python; do not upgrade a
+running ComfyUI environment in place. Manager binaries continue to use 3.12.
 
 ```bash
 git clone https://github.com/AIPowerGrid/grid-media-worker.git

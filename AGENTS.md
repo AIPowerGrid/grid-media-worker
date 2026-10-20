@@ -89,6 +89,10 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
   package metadata or the lock is broken.
   Retain the reviewed multidict 6.9.1 security floor; dependency edits require
   a frozen-lock install, full tests and a complete locked dependency audit.
+  Pillow13.0.0 and certifi2026.10.19 are minimum security floors. Source installs
+  require Python3.11+; manager binaries remain on3.12. Both bundled/release and
+  CI uv must use0.13.4 or newer with a reviewed exact bundle pin. Do not waive
+  the certificate-root or media-decoder findings, or hot-upgrade serving venvs.
 
 ## Local Contracts
 
@@ -172,7 +176,7 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 
 ## Verification
 
-- `pytest tests/` — CI runs it on Python 3.10–3.12 (`.github/workflows/test.yml`).
+- `pytest tests/` — CI runs it on Python 3.11–3.12 (`.github/workflows/test.yml`).
 - `uv lock --check`, then export all extras with hashes and run
   `pip-audit==2.9.0 --require-hashes --disable-pip` against that export.
 - `gitleaks detect --source . --no-git --config .gitleaks.toml --redact`, then
