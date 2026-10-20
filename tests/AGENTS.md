@@ -7,6 +7,15 @@ and the WebSocket worker.
 
 ## Ownership
 
+- `test_fasth3_sources.py` covers the disabled candidate's exact graph pin,
+  role completeness, rational H3 timing, byte/slot commitments, collision names,
+  pre-download rejection and cancellation. WS cases reject model/schema/graph
+  candidates without rendering or terminal/refund messages. Real transport
+  functions use synthetic bytes and mocked HTTP only; these are not GPU/R2,
+  licensing, audio/appearance quality or billing proofs. Core's opt-in
+  `test_fasth3_worker_handoff.py` uses this actual adapter and a reviewed test
+  interpreter, not a copied worker implementation.
+
 - `test_video_startup.py` - normal-run capability gating, exact Core model/root/
   contract, complete shared source modes, missing nodes/files, private POSIX
   state, loopback/TLS origin rules and bounded read-only HTTP. Worker keys must

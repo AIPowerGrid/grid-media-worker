@@ -97,6 +97,9 @@ Ships a FastAPI control UI (setup wizard + dashboard) on port 7860. Console scri
 - **One transport:** `bridge/ws_worker.py` opens a persistent WebSocket to
   `/v1/workers/ws` (derived from `GRID_API_URL`) for push dispatch and
   presigned R2 uploads. The retired polling client is not shipped.
+- FastH3 has an offline candidate source adapter only. Normal WS dispatch
+  rejects it and no H3 feature/model is advertised; graph/source fixtures do
+  not establish rights, native qualification or public release readiness.
 - Distilled BF16 source clips through625frames require the additive
   `recipe-media-sources-625-v1` feature on one compatible worker. Old source
   workers remain eligible for337-frame work only. Default workers, NVFP4 and
