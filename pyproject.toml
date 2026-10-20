@@ -7,7 +7,7 @@ name = "comfy-bridge"
 version = "0.2.0"
 description = "ComfyUI Bridge for AI Power Grid"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
   "httpx",
   "aiohttp>=3.14.4,<4",
@@ -20,7 +20,8 @@ dependencies = [
   "cryptography>=42.0.0",
   "jsonschema>=4.21.0",
   "eth-account>=0.13.7,<0.14",
-  "Pillow>=11.0,<13",
+  "Pillow>=13.0.0,<14",
+  "certifi>=2026.10.19",
   "safetensors>=0.6,<1",
   "numpy>=2,<3",
 ]
@@ -33,7 +34,7 @@ test = [
 ]
 release = [
   "pyinstaller==6.21.0",
-  "uv==0.11.28",
+  "uv==0.13.4",
 ]
 
 [project.scripts]
