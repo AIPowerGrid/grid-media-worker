@@ -578,6 +578,13 @@ class WSWorker:
     async def _handle_job(self, ws, msg: dict):
         job_id = msg["id"]
         payload = dict(msg.get("payload", {}))
+        from .fasth3_sources import identifies_fasth3
+
+        if identifies_fasth3(msg.get("model"), payload):
+            # No startup profile qualifies H3 yet. Never render or send a
+            # definitive failure/refund for an uninspected durable identity.
+            await ws.close(code=1011, reason="FastH3 runtime is not qualified")
+            raise RenderUncertain("FastH3 runtime is not qualified")
         upload_slots = msg.get("upload", [])
         durable = "_grid_media_job_version" in payload
         n = payload.get("n", 1) if durable else int(payload.get("n", 1) or 1)

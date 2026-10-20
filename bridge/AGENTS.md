@@ -60,6 +60,15 @@ template the workflow per job, drive ComfyUI, relay progress/previews, and retur
   PNG commitments are required; opening-image sources and other LoadImage
   nodes reject before any fetch. No graph injection or role downgrade.
 - **Config:** `config.py` (`Settings`) — env reads + `.env` loading; the single config surface.
+- `fasth3_sources.py` is an offline qualification adapter, not runtime admission.
+  It validates the exact Core candidate graph pin, H3's 17k+5 timing and four
+  distinct roles (appearance, opening, audio reference, preserved soundtrack)
+  before any fetch. All role pairs must be present; unknown nodes/weights/
+  controls and legacy source mixing reject. It reuses `source_media`'s bounded
+  exact-byte, R2-only transfer without rewriting semantic roles. Normal WS
+  dispatch rejects H3 before render/journal/terminal error; no H3 capability is
+  advertised. Startup/native qualification, licensing, source ownership and
+  retention, output verification and paid lifecycle remain release gates.
 - **Video startup:** `video_startup.py` - default-off governed video compatibility
   check. Require one explicit governed LTX model and video-only jobs, private POSIX
   state and the actual loopback ComfyUI origin. Read authenticated Core recipes

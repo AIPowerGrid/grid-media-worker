@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import re
 import uuid
+from typing import Any
 from urllib.parse import urlsplit
 
 import httpx
@@ -95,7 +96,24 @@ def validate_bindings(workflow: dict, payload: dict) -> list[tuple[dict, dict]]:
 
 async def download_source(source: dict) -> str:
     """Verify the entire source before giving it to the loopback decoder."""
-    limit, mime, ext, _kind, _field = LIMITS[source["role"]]
+    return await download_committed_source(source, transport_role=source["role"])
+
+
+async def download_committed_source(source: dict[str, Any], *, transport_role: str) -> str:
+    """Transfer a validated commitment without changing its semantic source role."""
+    try:
+        limit, mime, ext, _kind, _field = LIMITS[transport_role]
+        if (not isinstance(source.get("url"), str) or not 0 < len(source["url"]) <= 4096
+                or type(source.get("bytes")) is not int or not 0 < source["bytes"] <= limit
+                or source.get("content_type") != mime or not isinstance(source.get("sha256"), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", source["sha256"])):
+            raise ValueError
+        url = urlsplit(source["url"])
+        if (url.scheme != "https" or not R2_HOST.fullmatch(url.hostname or "")
+                or url.port not in {None, 443} or url.username or url.password or url.fragment):
+            raise ValueError
+    except (ValueError, KeyError, TypeError, AttributeError):
+        raise RuntimeError("Invalid committed source transfer") from None
     base = urlsplit(Settings.COMFYUI_URL)
     if (base.scheme != "http" or base.hostname not in {"127.0.0.1", "::1"}
             or base.username or base.password or base.query or base.fragment
